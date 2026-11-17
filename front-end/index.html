@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pickleball Open Play</title>
+  <meta name="description" content="Join our pickleball open play. See the schedule, check live slot availability, and register online.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <header class="hero">
+    <div class="container">
+      <p class="eyebrow">Open Play</p>
+      <h1 id="event-title">Pickleball Open Play</h1>
+      <p class="hero-sub" id="event-tagline">No partner needed. Show up, sign up, and play.</p>
+      <a class="btn btn-primary" href="#register">Register now</a>
+    </div>
+  </header>
+
+  <main class="container layout">
+
+    <div class="col-main">
+
+      <!-- EVENT INFO -->
+      <section class="card" aria-labelledby="info-heading">
+        <h2 id="info-heading">Event Details</h2>
+        <dl class="info-grid">
+          <div><dt>Date</dt><dd id="info-date">—</dd></div>
+          <div><dt>Time</dt><dd id="info-time">—</dd></div>
+          <div><dt>Venue</dt><dd id="info-venue">—</dd></div>
+          <div><dt>Fee</dt><dd id="info-fee">—</dd></div>
+          <div><dt>Level</dt><dd id="info-level">—</dd></div>
+        </dl>
+        <ul class="notes" id="info-notes"></ul>
+      </section>
+
+      <!-- LIVE SLOTS -->
+      <section class="card" aria-labelledby="slots-heading">
+        <div class="slots-head">
+          <h2 id="slots-heading">Live Slots</h2>
+          <span class="badge" id="slot-status" data-state="loading">Loading…</span>
+        </div>
+
+        <!-- aria-live: screen readers announce when the count changes -->
+        <div class="counter" aria-live="polite" aria-atomic="true">
+          <span class="counter-num" id="slot-registered">–</span>
+          <span class="counter-sep">/</span>
+          <span class="counter-max" id="slot-max">16</span>
+          <span class="counter-label">players</span>
+        </div>
+
+        <div class="meter" role="progressbar" aria-label="Slots filled"
+             aria-valuemin="0" aria-valuemax="16" aria-valuenow="0" id="slot-meter">
+          <div class="meter-fill" id="slot-meter-fill"></div>
+        </div>
+        <p class="muted" id="slot-left">&nbsp;</p>
+
+        <ol class="slot-grid" id="slot-grid" aria-label="Player slots"></ol>
+
+        <p class="muted small" id="sync-note" role="status"></p>
+      </section>
+    </div>
+
+    <!-- REGISTRATION -->
+    <aside class="col-side">
+      <section class="card sticky" id="register" aria-labelledby="reg-heading">
+        <h2 id="reg-heading">Register</h2>
+
+        <form id="reg-form" novalidate>
+          <div class="field">
+            <label for="f-fullName">Full name</label>
+            <input id="f-fullName" name="fullName" type="text" autocomplete="name" required maxlength="80">
+            <p class="error" id="err-fullName" role="alert"></p>
+          </div>
+
+          <div class="field">
+            <label for="f-contactNumber">Contact number</label>
+            <input id="f-contactNumber" name="contactNumber" type="tel" inputmode="tel" autocomplete="tel"
+                   placeholder="09XX XXX XXXX" maxlength=11 required>
+            <p class="error" id="err-contactNumber" role="alert"></p>
+          </div>
+
+          <div class="field">
+            <label for="f-email">Email <span class="muted">(optional)</span></label>
+            <input id="f-email" name="email" type="email" autocomplete="email" maxlength="100">
+            <p class="error" id="err-email" role="alert"></p>
+          </div>
+
+          <fieldset class="group">
+            <legend>Where are you from?</legend>
+
+            <div class="field">
+              <label for="f-province">Province</label>
+              <input id="f-province" name="province" type="text" autocomplete="address-level1" required maxlength="60">
+              <p class="error" id="err-province" role="alert"></p>
+            </div>
+
+            <div class="field">
+              <label for="f-municipalityOrCity">Municipality / City</label>
+              <input id="f-municipalityOrCity" name="municipalityOrCity" type="text" autocomplete="address-level2" required maxlength="60">
+              <p class="error" id="err-municipalityOrCity" role="alert"></p>
+            </div>
+
+            <div class="field">
+              <label for="f-barangay">Barangay</label>
+              <input id="f-barangay" name="barangay" type="text" required maxlength="60">
+              <p class="error" id="err-barangay" role="alert"></p>
+            </div>
+          </fieldset>
+
+          <div class="field">
+            <label for="f-playerTag">Player type</label>
+            <select id="f-playerTag" name="playerTag">
+              <option value="Bagong Manlalaro">Bagong Manlalaro (new player)</option>
+              <option value="Regular">Regular</option>
+              <option value="Bisita">Bisita (guest)</option>
+            </select>
+            <p class="error" id="err-playerTag" role="alert"></p>
+          </div>
+
+          <div class="field check">
+            <input id="f-consent" name="consent" type="checkbox" required>
+            <label for="f-consent">I agree to show my first name and last initial on the public player list.</label>
+            <p class="error" id="err-consent" role="alert"></p>
+          </div>
+
+          <button class="btn btn-primary btn-block" id="submit-btn" type="submit">Reserve my slot</button>
+          <p class="form-msg" id="form-msg" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </aside>
+
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+       <a href="admin.html" id="admin-link" class="muted small">Admin</a>
+      <p class="muted small">Pickleball Open Play · All skill levels welcome.</p>
+    </div>
+  </footer>
+
+  <script src="config.js" defer></script>
+  <script src="app.js" defer></script>
+ 
+  
+</body>
+</html>

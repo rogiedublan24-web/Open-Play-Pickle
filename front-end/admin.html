@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Open Play Admin</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <header class="hero hero-sm">
+    <div class="container">
+      <p class="eyebrow">Admin</p>
+      <h1>Open Play Admin</h1>
+    </div>
+  </header>
+
+  <main class="container admin-main">
+
+    <!-- LOGIN -->
+    <section class="card narrow" id="login-card" aria-labelledby="login-heading">
+      <h2 id="login-heading">Admin sign in</h2>
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label for="admin-key">Admin key</label>
+          <input id="admin-key" type="password" autocomplete="new-password" value="" required>
+        </div>
+        <button class="btn btn-primary btn-block" id="login-btn" type="submit">Unlock</button>
+        <p class="form-msg" id="login-msg" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- ADMIN PANEL (hidden until the key is accepted) -->
+    <div class="admin-panel" id="admin-panel" hidden>
+
+      <section class="card" aria-labelledby="slots-heading">
+        <div class="card-head">
+          <h2 id="slots-heading">Slots</h2>
+          <button class="btn btn-secondary btn-sm" id="logout-btn" type="button">Sign out</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><b id="sum-occupied">–</b><span>Players</span></div>
+          <div class="stat"><b id="sum-available">–</b><span>Available</span></div>
+          <div class="stat"><b id="sum-waitlisted">–</b><span>Waitlisted</span></div>
+          <div class="stat"><b id="sum-max">–</b><span>Max players</span></div>
+        </div>
+
+        <form id="max-form" class="toolbar" novalidate>
+          <div class="field small-field">
+            <label for="max-input">Change maximum players</label>
+            <input id="max-input" type="number" min="1" max="200" step="1" inputmode="numeric">
+          </div>
+          <button class="btn btn-primary btn-sm" id="max-btn" type="submit">Save maximum</button>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="event-heading">
+        <h2 id="event-heading">Event details</h2>
+        <p class="muted small">These are shown on the public page. Date and time use Philippine time.</p>
+
+        <form id="event-form" novalidate>
+          <div class="grid-2">
+            <div class="field">
+              <label for="ev-title">Title</label>
+              <input id="ev-title" type="text" maxlength="100">
+            </div>
+            <div class="field">
+              <label for="ev-level">Level</label>
+              <input id="ev-level" type="text" maxlength="60" placeholder="e.g. All levels">
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="ev-tagline">Tagline</label>
+            <input id="ev-tagline" type="text" maxlength="200">
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label for="ev-start">Starts</label>
+              <input id="ev-start" type="datetime-local">
+            </div>
+            <div class="field">
+              <label for="ev-end">Ends</label>
+              <input id="ev-end" type="datetime-local">
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label for="ev-venue">Venue</label>
+              <input id="ev-venue" type="text" maxlength="120" placeholder="e.g. Sunrise Pickleball Courts">
+            </div>
+            <div class="field">
+              <label for="ev-address">Address</label>
+              <input id="ev-address" type="text" maxlength="120" placeholder="e.g. Maasin City, Southern Leyte">
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="ev-fee">Fee</label>
+            <input id="ev-fee" type="text" maxlength="60" placeholder="e.g. PHP 150 per player">
+          </div>
+
+          <div class="field">
+            <label for="ev-notes">Notes <span class="muted">(one per line)</span></label>
+            <textarea id="ev-notes" rows="4"></textarea>
+          </div>
+
+          <button class="btn btn-primary btn-sm" id="event-btn" type="submit">Save event details</button>
+          <p class="form-msg" id="event-msg" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="reg-heading">
+        <h2 id="reg-heading">Registrations</h2>
+
+        <div class="toolbar">
+          <div class="field small-field">
+            <label for="filter-status">Status</label>
+            <select id="filter-status">
+              <option value="">All</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="waitlisted">Waitlisted</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="field small-field">
+            <label for="filter-tag">Player tag</label>
+            <select id="filter-tag">
+              <option value="">All</option>
+              <option value="Bagong Manlalaro">Bagong Manlalaro</option>
+              <option value="Regular">Regular</option>
+              <option value="Waitlist">Waitlist</option>
+              <option value="Bisita">Bisita</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="refresh-btn" type="button">Refresh</button>
+        </div>
+
+        <p class="form-msg" id="admin-msg" role="status" aria-live="polite"></p>
+
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Contact</th>
+                <th>Address</th>
+                <th>Registered</th>
+                <th>Tag</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="reg-body"></tbody>
+          </table>
+        </div>
+
+        <div class="pager">
+          <button class="btn btn-secondary btn-sm" id="prev-btn" type="button">Previous</button>
+          <span class="muted small" id="page-info">–</span>
+          <button class="btn btn-secondary btn-sm" id="next-btn" type="button">Next</button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script src="config.js" defer></script>
+  <script src="admin.js" defer></script>
+  <a href="index.html" class="back-link">← Back to site</a>
+</body>
+</html>
