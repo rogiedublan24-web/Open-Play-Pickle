@@ -363,6 +363,8 @@ app.patch('/api/admin/event', requireAdmin, async (req, res, next) => {
 
 /* ---------- Errors ---------- */
 
+/* ---------- Errors ---------- */
+
 app.use((req, res) => res.status(404).json({ message: 'Route not found.' }));
 
 app.use((err, req, res, next) => {
@@ -378,6 +380,8 @@ app.use((err, req, res, next) => {
   if (err.name === 'CastError') {
     return res.status(400).json({ message: 'Invalid ID.' });
   }
+  
+  // Dito nakalagay ang console.error para lumitaw sa Vercel Logs
   console.error(err);
   res.status(500).json({ message: 'Something went wrong on the server.' });
 });
