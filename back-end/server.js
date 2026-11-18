@@ -32,7 +32,7 @@ if (!MONGODB_URI || !ADMIN_KEY) {
 const STATUSES = ['pending', 'confirmed', 'waitlisted', 'cancelled'];
 const TAGS = ['Bagong Manlalaro', 'Regular', 'Waitlist', 'Bisita'];
 const OCCUPYING = ['pending', 'confirmed'];   // statuses that take up a slot
-const NEW_REGISTRATION_STATUS = 'pending';    // change to 'confirmed' to auto-confirm new players
+const NEW_REGISTRATION_STATUS = 'confirmed';    // change to 'confirmed' to auto-confirm new players
 
 const app = express();
 
