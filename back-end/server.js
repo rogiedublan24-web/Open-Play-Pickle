@@ -14,7 +14,7 @@ function numberFromEnv(name, fallback) {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 const DEFAULT_MAX_PLAYERS = numberFromEnv('DEFAULT_MAX_PLAYERS', 16);
-const MAX_WAITLIST = numberFromEnv('MAX_WAITLIST', 5);
+
 
 // CORS_ORIGIN in .env is a comma-separated list of allowed origins
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || '')
@@ -29,10 +29,10 @@ if (!MONGODB_URI || !ADMIN_KEY) {
 }
 
 // Must match the lists in admin.js
-const STATUSES = ['pending', 'confirmed', 'waitlisted', 'cancelled'];
-const TAGS = ['Bagong Manlalaro', 'Regular', 'Waitlist', 'Bisita'];
+const STATUSES = ['pending', 'confirmed', 'cancelled'];
+const TAGS = ['Bagong Manlalaro', 'Regular', 'Bisita'];
 const OCCUPYING = ['pending', 'confirmed'];   // statuses that take up a slot
-const NEW_REGISTRATION_STATUS = 'confirmed';    // change to 'confirmed' to auto-confirm new players
+const NEW_REGISTRATION_STATUS = 'confirmed';    // status given to new players when slots are free
 
 const app = express();
 
@@ -49,7 +49,7 @@ app.use(cors({
     cb(new Error('Not allowed by CORS'));
   },
 }));
-app.use(express.json());
+app.use(express.json({ limit: '400kb' }));   // bigger limit: the admin can upload a small QR image
 
 // Limit wrong-key attempts on the admin routes (helps against key guessing).
 // Only 401 (wrong key) responses count, so normal admin work is never blocked.
@@ -96,6 +96,8 @@ const registrationSchema = new mongoose.Schema({
   playerTag: { type: String, enum: TAGS, default: 'Bagong Manlalaro' },
   status: { type: String, enum: STATUSES, default: NEW_REGISTRATION_STATUS },
   showOnPublicList: { type: Boolean, default: false },
+  paid: { type: Boolean, default: false },   // only the admin can change this
+  paymentRef: { type: String, trim: true, default: '' },   // 13-digit GCash reference number
   registrationTimestamp: { type: Date, default: Date.now },
 });
 const Registration = mongoose.model('Registration', registrationSchema);
@@ -118,6 +120,9 @@ const eventSchema = new mongoose.Schema({
   venue: { type: String, default: '' },
   address: { type: String, default: '' },
   fee: { type: String, default: '' },
+  gcashName: { type: String, default: '' },
+  gcashNumber: { type: String, default: '' },
+  gcashQr: { type: String, default: '' },   // small image saved as text (data URL)
   notes: { type: [String], default: [] },
 });
 const EventInfo = mongoose.model('EventInfo', eventSchema);
@@ -135,19 +140,12 @@ const getEvent = () =>
 // The slot summary used by both the public page and the admin page
 async function getSlots() {
   const settings = await getSettings();
-  const [occupied, waitlisted] = await Promise.all([
-    Registration.countDocuments({ status: { $in: OCCUPYING } }),
-    Registration.countDocuments({ status: 'waitlisted' }),
-  ]);
-  const isFull = occupied >= settings.maxPlayers;
+   const occupied = await Registration.countDocuments({ status: { $in: OCCUPYING } });
   return {
     maxPlayers: settings.maxPlayers,
     occupied,
     availableSlots: Math.max(settings.maxPlayers - occupied, 0),
-    isFull,
-    waitlisted,
-    maxWaitlist: MAX_WAITLIST,
-    waitlistFull: isFull && waitlisted >= MAX_WAITLIST,
+    isFull: occupied >= settings.maxPlayers,
   };
 }
 
@@ -178,8 +176,9 @@ app.get('/api/players', async (req, res, next) => {
       .sort({ registrationTimestamp: 1 })
       .lean();
     res.json(players.map((p) => ({
-      displayName: publicName(p.fullName),
+       displayName: publicName(p.fullName),
       playerTag: p.playerTag,
+      paid: p.paid === true,   // shown as a Paid / Unpaid chip on the public slots
     })));
   } catch (err) { next(err); }
 });
@@ -203,15 +202,32 @@ async function createRegistration(req, res, next) {
       return res.status(409).json({ message: 'This contact number is already registered.' });
     }
 
-    // Slots left -> pending. Full -> waitlist (up to MAX_WAITLIST). Both full -> reject.
-    const slots = await getSlots();
-    let status = NEW_REGISTRATION_STATUS;
-    if (slots.availableSlots <= 0) {
-      if (slots.waitlisted >= MAX_WAITLIST) {
-        return res.status(409).json({ message: 'The event and the waitlist are both full.' });
+    // When GCash is set up (number or QR), new players wait for payment.
+    // The reference number is optional here: the player can send it later after paying.
+    const event = await getEvent();
+    const paymentRequired = Boolean(event.gcashNumber || event.gcashQr);
+    const paymentRef = String(b.paymentRef || '').replace(/\s+/g, '');
+    if (paymentRequired && paymentRef) {
+      if (!/^\d{13}$/.test(paymentRef)) {
+        return res.status(400).json({
+          message: 'Please fix the highlighted fields.',
+          details: ['The GCash reference number must be 13 digits.'],
+        });
       }
-      status = 'waitlisted';
+      const refUsed = await Registration.findOne({ paymentRef, status: { $ne: 'cancelled' } });
+      if (refUsed) {
+        return res.status(409).json({ message: 'This GCash reference number was already used.' });
+      }
     }
+
+    // Slots left -> pending (paid players wait for the admin to verify) or confirmed.
+    // Full -> waitlist (up to MAX_WAITLIST). Both full -> reject.
+       // Slots left -> pending (waiting for payment) or confirmed. No slots left -> reject.
+    const slots = await getSlots();
+    if (slots.availableSlots <= 0) {
+      return res.status(409).json({ message: 'Sorry, all slots are taken.' });
+    }
+    const status = paymentRequired ? 'pending' : NEW_REGISTRATION_STATUS;
 
     const registration = await Registration.create({
       fullName: b.fullName,
@@ -222,12 +238,13 @@ async function createRegistration(req, res, next) {
       barangay: b.barangay,
       playerTag: TAGS.includes(b.playerTag) ? b.playerTag : 'Bagong Manlalaro',
       showOnPublicList: Boolean(b.showOnPublicList ?? b.consent ?? b.publicConsent),
+      paymentRef: paymentRequired ? paymentRef : '',
       status,
     });
 
     res.status(201).json({
-      message: status === 'waitlisted'
-        ? 'The event is full. You were added to the waitlist.'
+           message: status === 'pending'
+        ? 'Your slot is reserved. It will be confirmed after your payment is checked.'
         : 'Your slot is reserved!',
       status,
       registration,
@@ -236,6 +253,55 @@ async function createRegistration(req, res, next) {
   } catch (err) { next(err); }
 }
 app.post(['/api/register', '/api/registrations', '/api/registrants'], createRegistration);
+
+// A player who already registered sends the GCash reference number after paying
+const refLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,                       // max 10 tries per IP in 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many tries. Please try again in a few minutes.' },
+});
+app.post('/api/payment-ref', refLimiter, async (req, res, next) => {
+  try {
+    const contactNumber = String(req.body.contactNumber || '').replace(/[\s-]/g, '');
+    const paymentRef = String(req.body.paymentRef || '').replace(/\s+/g, '');
+
+    if (!contactNumber || !/^\d{13}$/.test(paymentRef)) {
+      return res.status(400).json({
+        message: 'Please check your details.',
+        details: ['Enter your contact number and the 13-digit GCash reference number.'],
+      });
+    }
+
+       // 09171234567, +639171234567 and 639171234567 are the same number: try all three
+    const last10 = contactNumber.replace(/\D/g, '').slice(-10);
+    const numberFormats = [contactNumber, `0${last10}`, `+63${last10}`, `63${last10}`];
+    const registration = await Registration.findOne({
+      contactNumber: { $in: numberFormats },
+      status: { $ne: 'cancelled' },
+    });
+    if (!registration) {
+      return res.status(404).json({ message: 'We could not find a registration with that contact number.' });
+    }
+    if (registration.paid) {
+      return res.status(409).json({ message: 'Your payment is already confirmed. Thank you!' });
+    }
+
+    const refUsed = await Registration.findOne({
+      paymentRef,
+      _id: { $ne: registration._id },
+      status: { $ne: 'cancelled' },
+    });
+    if (refUsed) {
+      return res.status(409).json({ message: 'This GCash reference number was already used.' });
+    }
+
+    registration.paymentRef = paymentRef;
+    await registration.save();
+    res.json({ message: 'Thank you! We received your reference number. The organizer will confirm your payment.' });
+  } catch (err) { next(err); }
+});
 
 /* ---------- Admin routes (need the x-admin-key header) ---------- */
 
@@ -248,23 +314,34 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
     const filter = {};
     if (STATUSES.includes(req.query.status)) filter.status = req.query.status;
     if (TAGS.includes(req.query.playerTag)) filter.playerTag = req.query.playerTag;
+    if (req.query.paid === 'true') filter.paid = true;
+    if (req.query.paid === 'false') filter.paid = { $ne: true };   // also matches older records without the field
 
-    const [total, registrations] = await Promise.all([
+    const [total, registrations, occupying, paidOccupying] = await Promise.all([
       Registration.countDocuments(filter),
       Registration.find(filter)
         .sort({ registrationTimestamp: 1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
+      Registration.countDocuments({ status: { $in: OCCUPYING } }),
+      Registration.countDocuments({ status: { $in: OCCUPYING }, paid: true }),
     ]);
-    res.json({ total, page, limit, registrations });
+    res.json({
+      total,
+      page,
+      limit,
+      registrations,
+      paidCount: paidOccupying,               // players holding a slot who already paid
+      unpaidCount: occupying - paidOccupying, // players holding a slot who have not paid yet
+    });
   } catch (err) { next(err); }
 });
 
-// Change a player's status and/or tag -> { message, registration }
+// Change a player's status, tag and/or payment -> { message, registration }
 app.patch('/api/admin/registrants/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { status, playerTag } = req.body;
+    const { status, playerTag, paid } = req.body;
     const registration = await Registration.findById(req.params.id);
     if (!registration) return res.status(404).json({ message: 'Registrant not found.' });
 
@@ -278,15 +355,18 @@ app.patch('/api/admin/registrants/:id', requireAdmin, async (req, res, next) => 
       if (!wasOccupying && willOccupy && slots.availableSlots <= 0) {
         return res.status(409).json({ message: 'There are no open slots left. Raise the max players first.' });
       }
-      if (registration.status !== 'waitlisted' && status === 'waitlisted' && slots.waitlisted >= MAX_WAITLIST) {
-        return res.status(409).json({ message: 'The waitlist is full.' });
-      }
+     
       registration.status = status;
     }
 
     if (playerTag !== undefined) {
       if (!TAGS.includes(playerTag)) return res.status(400).json({ message: 'Invalid player tag.' });
       registration.playerTag = playerTag;
+    }
+
+    if (paid !== undefined) {
+      if (typeof paid !== 'boolean') return res.status(400).json({ message: 'Invalid payment value.' });
+      registration.paid = paid;
     }
 
     await registration.save();
@@ -330,7 +410,7 @@ app.patch('/api/admin/event', requireAdmin, async (req, res, next) => {
     const update = {};
     const problems = [];
 
-    ['title', 'level', 'tagline', 'venue', 'address'].forEach((f) => {
+    ['title', 'level', 'tagline', 'venue', 'address', 'gcashName', 'gcashNumber'].forEach((f) => {
       if (b[f] !== undefined) update[f] = String(b[f]).trim();
     });
     if (b.fee !== undefined) update.fee = String(b.fee).trim();
@@ -347,7 +427,20 @@ app.patch('/api/admin/event', requireAdmin, async (req, res, next) => {
       else update[f] = d;
     });
 
+    // GCash QR image: a small png/jpeg/webp saved as a data URL ('' removes it)
+    if (b.gcashQr !== undefined) {
+      const qr = String(b.gcashQr);
+      if (qr === '') update.gcashQr = '';
+      else if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(qr) || qr.length > 300000) {
+        problems.push('The GCash QR must be a small PNG, JPG or WEBP image.');
+      } else update.gcashQr = qr;
+    }
+
     if (update.title !== undefined && !update.title) problems.push('The title cannot be empty.');
+    if (update.gcashName && update.gcashName.length > 60) problems.push('The GCash name is too long (60 characters max).');
+    if (update.gcashNumber && !/^[0-9+\s-]{7,20}$/.test(update.gcashNumber)) {
+      problems.push('The GCash number can only have digits, spaces, + and - (7 to 20 characters).');
+    }
     if (problems.length) {
       return res.status(400).json({ message: 'Please fix the highlighted fields.', details: problems });
     }
@@ -360,8 +453,6 @@ app.patch('/api/admin/event', requireAdmin, async (req, res, next) => {
     res.json({ message: 'Event details saved.', event });
   } catch (err) { next(err); }
 });
-
-/* ---------- Errors ---------- */
 
 /* ---------- Errors ---------- */
 
@@ -380,8 +471,8 @@ app.use((err, req, res, next) => {
   if (err.name === 'CastError') {
     return res.status(400).json({ message: 'Invalid ID.' });
   }
-  
-  // Dito nakalagay ang console.error para lumitaw sa Vercel Logs
+
+  // Logged so the real cause shows up in the Vercel Logs
   console.error(err);
   res.status(500).json({ message: 'Something went wrong on the server.' });
 });

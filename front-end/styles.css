@@ -942,3 +942,398 @@ a:hover { color: var(--brand-dark); }
 @media (max-width: 480px) {
   .hero:not(.hero-sm) { padding-bottom: 140px; }
 }
+/* =====================================================
+   NEW FEATURES: countdown, action buttons, payment box, paid select
+   (add at the very end of styles.css)
+   ===================================================== */
+
+/* ---------- Countdown (in the hero) ---------- */
+.countdown { margin: 0 0 26px; }
+.countdown-label {
+  margin: 0 0 10px;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.countdown-units { display: flex; flex-wrap: wrap; gap: 10px; }
+.cd-box {
+  min-width: 70px;
+  padding: 10px 12px 8px;
+  text-align: center;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .08));
+  border: 1px solid rgba(255, 255, 255, .28);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .3) inset, 0 4px 0 rgba(0, 0, 0, .25), 0 12px 20px rgba(0, 0, 0, .2);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.cd-box b {
+  display: block;
+  font-size: 1.9rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .25);
+}
+.cd-box span { font-size: .62rem; text-transform: uppercase; letter-spacing: .1em; opacity: .85; font-weight: 700; }
+
+/* while the event is running */
+.countdown.live .countdown-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .6) inset, 0 3px 0 #9db317, 0 8px 16px rgba(0, 0, 0, .22);
+}
+.countdown.live .countdown-label::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #d62f1f;
+  animation: breathe 1.6s var(--ease-soft) infinite;
+}
+
+/* ---------- Buttons under the event details ---------- */
+.action-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+
+/* ---------- How to pay ---------- */
+.pay-box {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px 18px;
+  align-items: center;
+  margin: 16px 0 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  box-shadow: inset 0 2px 6px rgba(16, 38, 26, .1);
+}
+.pay-box > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pay-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 750; }
+.pay-box strong { font-size: 1.15rem; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.pay-box .btn { justify-self: start; }
+
+/* ---------- Admin: paid / unpaid select and wider table ---------- */
+table.data { min-width: 1240px; }
+.data select { min-width: 8.5rem; }
+.data select.paid-select { font-weight: 700; }
+.data select.paid-select[data-paid="true"]  { background-color: #dcf3e5; color: var(--open); border-color: #9fd2b3; }
+.data select.paid-select[data-paid="false"] { background-color: #fdefd0; color: var(--warn); border-color: #ecc98a; }
+
+@media (max-width: 480px) {
+  .cd-box { min-width: 62px; padding: 9px 8px 7px; }
+  .cd-box b { font-size: 1.6rem; }
+  .countdown-units { gap: 8px; }
+}
+
+/* ---------- GCash QR (public page and admin preview) ---------- */
+.pay-qr {
+  display: block;
+  width: 230px;
+  max-width: 100%;
+  height: auto;
+  margin: 16px 0 0;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 0 rgba(16, 38, 26, .12), 0 12px 22px rgba(16, 38, 26, .14);
+}
+.qr-preview { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+.qr-preview img {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* ---------- "Already paid?" form inside the How to pay card ---------- */
+.ref-form { margin-top: 20px; padding-top: 18px; border-top: 1px dashed var(--line-strong); }
+.ref-form h3 { margin: 0 0 12px; font-size: 1.05rem; }
+
+/* ---------- Paid / Unpaid chip on the live slots ---------- */
+.slot-pay { align-self: flex-start; margin-top: 3px; padding: 1px 9px; border-radius: 999px; font-size: .72rem; font-weight: 700; }
+.slot-pay.paid { background: #dcf3e5; color: var(--open); }
+.slot-pay.unpaid { background: #fdefd0; color: var(--warn); }
+.slot.filled.unpaid { border-left-color: var(--sun); }
+
+/* ---------- Player type dropdown (registration form) ---------- */
+#f-playerTag {
+  font-weight: 700;
+  cursor: pointer;
+  border-left-width: 6px;
+  border-left-color: var(--court);
+  background-color: var(--court-soft);
+  color: var(--court);
+  margin-bottom: 5px;
+  box-shadow: 0 1px 0 #fff inset, 0 4px 0 #a9c6e8, 0 8px 12px rgba(16, 38, 26, .08);
+}
+#f-playerTag[data-tag="Regular"] {
+  border-left-color: #46b36f;
+  background-color: #dcf3e5;
+  color: var(--open);
+  box-shadow: 0 1px 0 #fff inset, 0 4px 0 #9fd2b3, 0 8px 12px rgba(16, 38, 26, .08);
+}
+#f-playerTag[data-tag="Bisita"] {
+  border-left-color: #8a5cd0;
+  background-color: #efe6fb;
+  color: #6b3fb0;
+  box-shadow: 0 1px 0 #fff inset, 0 4px 0 #cdb8ec, 0 8px 12px rgba(16, 38, 26, .08);
+}
+#f-playerTag:hover { transform: translateY(-1px); }
+#f-playerTag:focus { background-color: #fff; }
+
+/* a styled pop-up list in browsers that support it (newer Chrome and Edge) */
+@supports (appearance: base-select) {
+  #f-playerTag, #f-playerTag::picker(select) { appearance: base-select; }
+  #f-playerTag { background-image: none; padding-right: 14px; }   /* the browser draws its own arrow */
+  #f-playerTag::picker(select) {
+    margin-top: 6px;
+    padding: 6px;
+    background: #fff;
+    border: 1.5px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 18px 36px rgba(16, 38, 26, .2);
+  }
+  #f-playerTag option {
+    padding: 11px 14px;
+    border-radius: 10px;
+    font-weight: 650;
+    color: var(--text);
+    cursor: pointer;
+  }
+  #f-playerTag option:hover { background: var(--surface-soft); }
+  #f-playerTag option:checked { background: var(--accent); color: var(--accent-ink); }
+  #f-playerTag option::checkmark { display: none; }
+}
+
+/* =====================================================
+   BOTTOM MENU (phones and small tablets only)
+   ===================================================== */
+.bottom-nav { display: none; }
+
+@media (max-width: 899px) {
+  body { padding-bottom: 92px; }          /* so the menu never covers the footer */
+
+  .bottom-nav {
+    display: flex;
+    gap: 4px;
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    z-index: 40;
+    padding: 6px;
+    background: rgba(255, 255, 255, .92);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line-strong);
+    border-radius: 22px;
+    box-shadow: 0 1px 0 #fff inset, 0 4px 0 var(--line-strong), 0 16px 30px rgba(16, 38, 26, .22);
+  }
+  .bottom-nav a {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 52px;
+    padding: 6px 4px;
+    border-radius: 16px;
+    color: var(--muted);
+    font-size: .68rem;
+    font-weight: 750;
+    letter-spacing: .02em;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color var(--t-fast) var(--ease-soft), color var(--t-fast) var(--ease-soft), transform var(--t-fast) var(--ease-soft);
+  }
+  .bottom-nav a:active { transform: scale(.94); }
+  .bottom-nav svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .bottom-nav a.active {
+    background: linear-gradient(180deg, #e8fd66, var(--accent) 60%, #c9e72e);
+    color: var(--accent-ink);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .7) inset, 0 3px 0 #97ae14;
+  }
+
+  /* hide the menu while typing, so the keyboard does not push it over the form */
+  body:has(input:focus, select:focus, textarea:focus) .bottom-nav { display: none; }
+}
+
+/* =====================================================
+   DESKTOP / PC (wide screens only)
+   ===================================================== */
+@media (min-width: 1100px) {
+  .container { max-width: 1200px; padding-inline: 24px; }
+  .layout { grid-template-columns: minmax(0, 1fr) 420px; gap: 28px; }
+  .card { padding: 32px; }
+
+  /* bigger hero text and countdown */
+  .hero:not(.hero-sm) { padding-top: 76px; }
+  .hero h1 { font-size: clamp(3.4rem, 4.6vw, 4.6rem); }
+  .hero-sub { max-width: 40ch; font-size: 1.3rem; }
+  .countdown-label { font-size: .86rem; }
+  .cd-box { min-width: 92px; padding: 14px 14px 11px; border-radius: 18px; }
+  .cd-box b { font-size: 2.6rem; }
+  .cd-box span { font-size: .7rem; }
+
+  /* ball and paddle follow the content edge instead of the screen edge */
+  .hero::after { top: 44px; width: 300px; right: max(-48px, calc(50% - 650px)); }
+  .hero > .container::before { top: 30px; right: 26%; width: 190px; height: 380px; }
+  .hero .container::after { right: 16%; }
+}
+
+/* =====================================================
+   TOP MENU (PC / laptop - same links as the phone menu)
+   ===================================================== */
+@media (min-width: 900px) {
+  html { scroll-padding-top: 84px; }
+
+  .bottom-nav {
+    display: flex;
+    gap: 4px;
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
+    padding: 6px;
+    background: rgba(255, 255, 255, .92);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    box-shadow: 0 1px 0 #fff inset, 0 3px 0 var(--line-strong), 0 12px 26px rgba(16, 38, 26, .22);
+  }
+  .bottom-nav a {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: .92rem;
+    font-weight: 750;
+    text-decoration: none;
+    transition: background-color var(--t-fast) var(--ease-soft), color var(--t-fast) var(--ease-soft);
+  }
+  .bottom-nav a:hover { background: rgba(16, 38, 26, .07); color: var(--ink, #10261a); }
+  .bottom-nav svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .bottom-nav a.active {
+    background: linear-gradient(180deg, #e8fd66, var(--accent) 60%, #c9e72e);
+    color: var(--accent-ink);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .7) inset, 0 3px 0 #97ae14;
+  }
+}
+
+/* Admin button - PC only, top-right, separate from the center menu */
+.nav-admin { display: none; }
+
+@media (min-width: 900px) {
+  .nav-admin {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    position: fixed;
+    top: 14px;
+    right: 20px;
+    z-index: 40;
+    padding: 11px 18px;
+    background: rgba(255, 255, 255, .92);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: .88rem;
+    font-weight: 750;
+    text-decoration: none;
+    box-shadow: 0 1px 0 #fff inset, 0 3px 0 var(--line-strong), 0 12px 26px rgba(16, 38, 26, .22);
+    transition: color var(--t-fast) var(--ease-soft), transform var(--t-fast) var(--ease-soft);
+  }
+  .nav-admin:hover { color: var(--accent-ink); transform: translateY(-1px); }
+  .nav-admin svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}
+
+    .notice {
+      margin: 0 0 16px;
+      padding: 12px 15px;
+      background: #fff8e1;
+      border: 1px solid #ecc98a;
+      border-left: 5px solid var(--sun);
+      border-radius: var(--radius-sm);
+      color: #6b4a0f;
+      font-size: .92rem;
+      line-height: 1.5;
+    }
+    .notice strong { color: #4a3208; }
+
+    /* Admin button on phones: small round icon, top-right */
+@media (max-width: 899px) {
+  .nav-admin {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 40;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    background: rgba(255, 255, 255, .92);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    color: var(--muted);
+    box-shadow: 0 1px 0 #fff inset, 0 3px 0 var(--line-strong), 0 8px 16px rgba(16, 38, 26, .22);
+  }
+  .nav-admin span { display: none; }   /* icon only, no text */
+  .nav-admin svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}

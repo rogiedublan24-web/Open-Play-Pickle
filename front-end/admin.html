@@ -43,8 +43,9 @@
         <div class="stats">
           <div class="stat"><b id="sum-occupied">–</b><span>Players</span></div>
           <div class="stat"><b id="sum-available">–</b><span>Available</span></div>
-          <div class="stat"><b id="sum-waitlisted">–</b><span>Waitlisted</span></div>
           <div class="stat"><b id="sum-max">–</b><span>Max players</span></div>
+          <div class="stat"><b id="sum-paid">–</b><span>Paid</span></div>
+          <div class="stat"><b id="sum-unpaid">–</b><span>Unpaid</span></div>
         </div>
 
         <form id="max-form" class="toolbar" novalidate>
@@ -104,6 +105,26 @@
             <input id="ev-fee" type="text" maxlength="60" placeholder="e.g. PHP 150 per player">
           </div>
 
+          <div class="grid-2">
+            <div class="field">
+              <label for="ev-gcash-name">GCash name <span class="muted"></span></label>
+              <input id="ev-gcash-name" type="text" maxlength="60" placeholder="e.g. Juan D.">
+            </div>
+            <div class="field">
+              <label for="ev-gcash-number">GCash number <span class="muted"></span></label>
+              <input id="ev-gcash-number" type="text" inputmode="tel" maxlength="20" placeholder="09XX XXX XXXX">
+            </div>
+          </div>
+          <div class="field">
+            <label for="ev-gcash-qr">GCash QR code <span class="muted"></span></label>
+            <input id="ev-gcash-qr" type="file" accept="image/png,image/jpeg,image/webp">
+            <div class="qr-preview" id="qr-preview" hidden>
+              <img id="qr-img" alt="GCash QR preview">
+              <button class="btn btn-danger btn-sm" id="qr-remove" type="button">Remove QR</button>
+            </div>
+          </div>
+          <p class="muted small">The "How to pay" box and the reference number field appear on the public page when a GCash number or QR is added. To use a different GCash account, upload that account's QR, change the name and number, then save.</p>
+
           <div class="field">
             <label for="ev-notes">Notes <span class="muted">(one per line)</span></label>
             <textarea id="ev-notes" rows="4"></textarea>
@@ -124,7 +145,6 @@
               <option value="">All</option>
               <option value="pending">Pending</option>
               <option value="confirmed">Confirmed</option>
-              <option value="waitlisted">Waitlisted</option>
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
@@ -134,11 +154,19 @@
               <option value="">All</option>
               <option value="Bagong Manlalaro">Bagong Manlalaro</option>
               <option value="Regular">Regular</option>
-              <option value="Waitlist">Waitlist</option>
               <option value="Bisita">Bisita</option>
             </select>
           </div>
+          <div class="field small-field">
+            <label for="filter-paid">Payment</label>
+            <select id="filter-paid">
+              <option value="">All</option>
+              <option value="true">Paid</option>
+              <option value="false">Unpaid</option>
+            </select>
+          </div>
           <button class="btn btn-secondary btn-sm" id="refresh-btn" type="button">Refresh</button>
+          <button class="btn btn-secondary btn-sm" id="export-btn" type="button">Export CSV</button>
         </div>
 
         <p class="form-msg" id="admin-msg" role="status" aria-live="polite"></p>
@@ -154,6 +182,7 @@
                 <th>Registered</th>
                 <th>Tag</th>
                 <th>Status</th>
+                <th>Payment</th>
                 <th>Action</th>
               </tr>
             </thead>

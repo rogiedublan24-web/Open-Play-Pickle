@@ -11,8 +11,9 @@ const PAGE_SIZE = 20;
 const KEY_STORAGE = 'pickleball-admin-key';
 
 // Must match the enums in the API (Registration model)
-const STATUSES = ['pending', 'confirmed', 'waitlisted', 'cancelled'];
-const TAGS = ['Bagong Manlalaro', 'Regular', 'Waitlist', 'Bisita'];
+const STATUSES = ['pending', 'confirmed', 'cancelled'];
+const TAGS = ['Bagong Manlalaro', 'Regular', 'Bisita'];
+const PAYMENT = ['Unpaid', 'Paid'];
 
 const $ = (id) => document.getElementById(id);
 
@@ -179,7 +180,6 @@ function handleError(err) {
 function renderSlotSummary(s) {
   $('sum-occupied').textContent = s.occupied;
   $('sum-available').textContent = s.availableSlots;
-  $('sum-waitlisted').textContent = s.maxWaitlist ? `${s.waitlisted} / ${s.maxWaitlist}` : s.waitlisted;
   $('sum-max').textContent = s.maxPlayers;
   if (document.activeElement !== $('max-input')) $('max-input').value = s.maxPlayers;
 }
@@ -254,6 +254,14 @@ function buildRow(reg, number) {
 
   const tagSelect = makeSelect(TAGS, reg.playerTag, `Tag for ${reg.fullName}`);
   const statusSelect = makeSelect(STATUSES, reg.status, `Status for ${reg.fullName}`);
+  const paidSelect = makeSelect(PAYMENT, reg.paid ? 'Paid' : 'Unpaid', `Payment for ${reg.fullName}`);
+  paidSelect.className = 'paid-select';
+  paidSelect.dataset.paid = String(Boolean(reg.paid));
+  paidSelect.addEventListener('change', () => {
+    paidSelect.dataset.paid = String(paidSelect.value === 'Paid');
+    // Marking a pending player as paid also confirms them
+    if (paidSelect.value === 'Paid' && statusSelect.value === 'pending') statusSelect.value = 'confirmed';
+  });
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
@@ -266,6 +274,7 @@ function buildRow(reg, number) {
       const result = await api.updateRegistration(reg._id, {
         status: statusSelect.value,
         playerTag: tagSelect.value,
+        paid: paidSelect.value === 'Paid',
       });
       showMessage(`${result.registration.fullName}: ${result.message}`, 'ok');
       await Promise.all([loadRegistrations(), loadSlots()]);
@@ -311,24 +320,29 @@ function buildRow(reg, number) {
   tr.append(
     cell(String(number)),
     cell(textWithSub(reg.fullName, reg.email)),
-    cell(reg.contactNumber),
+    cell(textWithSub(reg.contactNumber, reg.paymentRef ? `Ref: ${reg.paymentRef}` : '')),
     cell(address),
     cell(registered),
     cell(tagSelect),
     cell(statusSelect),
+    cell(paidSelect),
     cell(actions),
   );
   return tr;
 }
 
-function renderTable({ total, registrations }) {
+function renderTable({ total, registrations, paidCount, unpaidCount }) {
   const body = $('reg-body');
   body.replaceChildren();
+
+  // Paid / unpaid totals for the players who hold a slot
+  if (typeof paidCount === 'number') $('sum-paid').textContent = paidCount;
+  if (typeof unpaidCount === 'number') $('sum-unpaid').textContent = unpaidCount;
 
   if (registrations.length === 0) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = 8;
+    td.colSpan = 9;
     td.className = 'empty-row';
     td.textContent = 'No registrations found.';
     tr.appendChild(td);
@@ -343,11 +357,17 @@ function renderTable({ total, registrations }) {
   $('next-btn').disabled = page >= pages;
 }
 
-async function loadRegistrations() {
-  const params = { page, limit: PAGE_SIZE };
+// The current filter choices, used by the table and by the CSV export
+function currentFilters() {
+  const params = {};
   if ($('filter-status').value) params.status = $('filter-status').value;
   if ($('filter-tag').value) params.playerTag = $('filter-tag').value;
-  const data = await api.getRegistrations(params);
+  if ($('filter-paid').value) params.paid = $('filter-paid').value;
+  return params;
+}
+
+async function loadRegistrations() {
+  const data = await api.getRegistrations({ page, limit: PAGE_SIZE, ...currentFilters() });
 
   // The last row of this page was deleted: go back one page
   if (data.registrations.length === 0 && page > 1) {
@@ -365,12 +385,94 @@ function reloadFromFirstPage() {
 
 $('filter-status').addEventListener('change', reloadFromFirstPage);
 $('filter-tag').addEventListener('change', reloadFromFirstPage);
+$('filter-paid').addEventListener('change', reloadFromFirstPage);
 $('refresh-btn').addEventListener('click', () => {
   showMessage('', '');
   Promise.all([loadRegistrations(), loadSlots()]).catch(handleError);
 });
 $('prev-btn').addEventListener('click', () => { page -= 1; loadRegistrations().catch(handleError); });
 $('next-btn').addEventListener('click', () => { page += 1; loadRegistrations().catch(handleError); });
+
+/* =====================================================================
+   6b. EXPORT TO CSV - downloads every registration that matches the filters
+   ===================================================================== */
+// Names and addresses are typed by visitors. A cell that starts with = + - or @
+// could run as a formula when the file is opened in Excel, so we put a ' in front.
+// Phone numbers are written as ="0917..." so Excel keeps the leading zero.
+function csvCell(value, { phone = false } = {}) {
+  const text = value === null || value === undefined ? '' : String(value);
+  if (phone && /^\+?\d+$/.test(text)) return `"=""${text}"""`;
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
+function formatManila(iso) {
+  return new Date(iso).toLocaleString(LOCALE, { timeZone: TIMEZONE, dateStyle: 'medium', timeStyle: 'short' });
+}
+
+async function exportCsv() {
+  const btn = $('export-btn');
+  btn.disabled = true;
+  showMessage('Preparing the file...', '');
+
+  try {
+    const all = [];
+    let pageNo = 1;
+    let total = 0;
+    do {
+      const data = await api.getRegistrations({ page: pageNo, limit: 100, ...currentFilters() });
+      total = data.total;
+      if (data.registrations.length === 0) break;
+      all.push(...data.registrations);
+      pageNo += 1;
+    } while (all.length < total && pageNo <= 50);
+
+    if (all.length === 0) {
+      showMessage('There is nothing to export for this filter.', 'bad');
+      return;
+    }
+
+    const header = [
+      'No.', 'Full name', 'Contact number', 'Email', 'Province', 'Municipality / City',
+      'Barangay', 'Player tag', 'Status', 'Payment', 'GCash reference', 'On public list', 'Registered (PH time)',
+    ];
+    const rows = all.map((r, i) => [
+      csvCell(i + 1),
+      csvCell(r.fullName),
+      csvCell(r.contactNumber, { phone: true }),
+      csvCell(r.email),
+      csvCell(r.province),
+      csvCell(r.municipalityOrCity),
+      csvCell(r.barangay),
+      csvCell(r.playerTag),
+      csvCell(r.status),
+      csvCell(r.paid ? 'Paid' : 'Unpaid'),
+      csvCell(r.paymentRef, { phone: true }),
+      csvCell(r.showOnPublicList ? 'Yes' : 'No'),
+      csvCell(formatManila(r.registrationTimestamp)),
+    ]);
+
+    const csv = '\uFEFF' + [header.map((h) => csvCell(h)), ...rows].map((r) => r.join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }).format(new Date());
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `registrations-${today}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    showMessage(`Exported ${all.length} registration${all.length === 1 ? '' : 's'}.`, 'ok');
+  } catch (err) {
+    handleError(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$('export-btn').addEventListener('click', exportCsv);
 
 /* =====================================================================
    7. SIGN IN / SIGN OUT
@@ -432,6 +534,57 @@ function fromManilaInput(value) {
   return value ? new Date(`${value}:00+08:00`).toISOString() : null;
 }
 
+// The QR image is shrunk in the browser first, so it stays small in the database
+let qrData = '';
+
+function renderQr() {
+  $('qr-preview').hidden = !qrData;
+  if (qrData) $('qr-img').src = qrData;
+}
+
+function shrinkImage(file, maxSize = 480) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      let data = canvas.toDataURL('image/png');
+      if (data.length > 250000) data = canvas.toDataURL('image/jpeg', 0.85);
+      resolve(data);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('bad image')); };
+    img.src = url;
+  });
+}
+
+$('ev-gcash-qr').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  showEventMessage('', '');
+  try {
+    qrData = await shrinkImage(file);
+    renderQr();
+    showEventMessage('QR loaded. Press "Save event details" to publish it.', 'ok');
+  } catch {
+    showEventMessage('That image could not be read. Please use a PNG or JPG file.', 'bad');
+  }
+  e.target.value = '';
+});
+
+$('qr-remove').addEventListener('click', () => {
+  qrData = '';
+  renderQr();
+  showEventMessage('QR removed. Press "Save event details" to save.', 'ok');
+});
+
 function fillEventForm(ev) {
   $('ev-title').value = ev.title || '';
   $('ev-level').value = ev.level || '';
@@ -441,6 +594,10 @@ function fillEventForm(ev) {
   $('ev-venue').value = ev.venue || '';
   $('ev-address').value = ev.address || '';
   $('ev-fee').value = ev.fee || '';
+  $('ev-gcash-name').value = ev.gcashName || '';
+  $('ev-gcash-number').value = ev.gcashNumber || '';
+  qrData = ev.gcashQr || '';
+  renderQr();
   $('ev-notes').value = (ev.notes || []).join('\n');
 }
 
@@ -461,6 +618,9 @@ $('event-form').addEventListener('submit', async (e) => {
     venue: $('ev-venue').value.trim(),
     address: $('ev-address').value.trim(),
     fee: $('ev-fee').value.trim(),
+    gcashName: $('ev-gcash-name').value.trim(),
+    gcashNumber: $('ev-gcash-number').value.trim(),
+    gcashQr: qrData,
     notes: $('ev-notes').value.split('\n').map((line) => line.trim()).filter(Boolean),
   };
 
