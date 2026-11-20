@@ -492,6 +492,12 @@ tagSelect.addEventListener('change', syncTagColor);
 form.addEventListener('reset', () => setTimeout(syncTagColor));
 syncTagColor();
 
+// Province and city start filled in (Southern Leyte / Maasin City).
+// Tapping a box selects the text, so typing something else replaces it right away.
+['f-province', 'f-municipalityOrCity'].forEach((id) => {
+  $(id).addEventListener('focus', (e) => setTimeout(() => e.target.select(), 0));
+});
+
 const PH_MOBILE = /^(\+63|0)9\d{9}$/;               // 09171234567 or +639171234567
 
 function setError(name, message) {
