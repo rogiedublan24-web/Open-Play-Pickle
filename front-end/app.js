@@ -65,7 +65,7 @@ const api = {
       Returns a Promise: true when the main button is pressed, false otherwise.
       Uses textContent (not innerHTML), so names typed by users are safe.
    ===================================================================== */
-function showDialog({ kind = 'info', title, message, confirmText = 'OK', cancelText = '' }) {
+function showDialog({ kind = 'info', title, message, confirmText = 'OK', cancelText = '', listenText = '' }) {
   return new Promise((resolve) => {
     const dialog = document.createElement('dialog');
     dialog.className = 'modal';
@@ -109,7 +109,17 @@ function showDialog({ kind = 'info', title, message, confirmText = 'OK', cancelT
     if (!cancelText) ok.autofocus = true;
     actions.appendChild(ok);
 
-    form.append(icon, heading, text, actions);
+        form.append(icon, heading, text);
+    if (listenText && 'speechSynthesis' in window) {
+      // A real tap on this button always allows the voice, even on phones
+      const listen = document.createElement('button');
+      listen.type = 'button';
+      listen.className = 'btn btn-secondary btn-sm modal-listen';
+      listen.textContent = '🔊 Listen';
+      listen.addEventListener('click', () => speak(listenText, true));
+      form.appendChild(listen);
+    }
+    form.appendChild(actions);
     dialog.appendChild(form);
 
     dialog.addEventListener('close', () => {
@@ -124,7 +134,40 @@ function showDialog({ kind = 'info', title, message, confirmText = 'OK', cancelT
     dialog.showModal();
   });
 }
+ 
+/* =====================================================================
+   3b. VOICE - the browser reads a message out loud (free, built in, no AI service)
+   ===================================================================== */
+// Phones only allow speech that starts from a tap. Call this at the very start of the
+// button handler (before any waiting) so the later speak() is allowed.
+function unlockSpeech() {
+  if (!('speechSynthesis' in window)) return;
+  try {
+    const quiet = new SpeechSynthesisUtterance(' ');
+    quiet.volume = 0;
+    window.speechSynthesis.speak(quiet);
+  } catch { /* ignore */ }
+}
 
+function speak(text, immediate = false) {
+  if (!('speechSynthesis' in window)) return;     // older browsers: just stay silent
+  try {
+    const synth = window.speechSynthesis;
+    synth.cancel();
+    const voice = new SpeechSynthesisUtterance(text);
+    voice.lang = 'en-US';
+    voice.rate = 1;
+    voice.pitch = 1.05;
+    voice.volume = 1;
+    synth.resume();                               // fixes a "stuck" voice in some phone browsers
+    if (immediate) synth.speak(voice);            // from a button tap: speak right now
+    else setTimeout(() => synth.speak(voice), 90); // small delay: cancel() and speak() together can be dropped     // small delay: cancel() and speak() together can be dropped
+  } catch { /* the voice is a bonus, never break the page */ }
+}
+
+function stopSpeaking() {
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
 /* =====================================================================
    4. RENDERING - uses textContent (not innerHTML) so a malicious name
       cannot inject HTML or scripts (XSS protection)
@@ -475,6 +518,7 @@ function showMessage(text, kind) {
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   showMessage('', '');
+  unlockSpeech();  
 
   const values = {
     fullName: form.fullName.value.trim(),
@@ -505,16 +549,20 @@ form.addEventListener('submit', async (e) => {
     form.reset();
 
     // Pop-up box after a successful registration
+   
+    // Pop-up box after a successful registration
     const firstName = payload.fullName.split(/\s+/)[0];
+    const doneMessage = result.status === 'pending'
+      ? `Thank you, ${firstName}. Your slot is reserved. You can pay online using the "How to pay" box and send your GCash reference number, or just pay when you arrive at the event.`
+      : `Thank you, ${firstName}. Your slot is reserved. See you on the court!`;
     showDialog({
       kind: 'success',
       title: 'You are already registered!',
-      message: result.status === 'pending'
-        ? `Thank you, ${firstName}. Your slot is reserved. Please pay using the "How to pay" box, then send your GCash reference number so the organizer can confirm it.`
-        : `Thank you, ${firstName}. Your slot is reserved. See you on the court!`,
+      message: doneMessage,
+      listenText: doneMessage,
       confirmText: 'Got it',
-    });
-
+    }).then(stopSpeaking);
+    speak(doneMessage);                               // a voice reads the message out loud
     await refresh();                                  // update the slots right away
   } catch (err) {
     showMessage(err.details.length ? err.details.join(' ') : err.message, 'bad');
