@@ -321,6 +321,18 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
     if (TAGS.includes(req.query.playerTag)) filter.playerTag = req.query.playerTag;
     if (req.query.paid === 'true') filter.paid = true;
     if (req.query.paid === 'false') filter.paid = { $ne: true };   // also matches older records without the field
+        // Search box: matches name, number, email, address, tag or reference. Capital or small letters both work.
+    const q = String(req.query.q || '').trim().slice(0, 60);
+    if (q) {
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');   // the text is searched as plain text, never as a pattern
+      const or = ['fullName', 'contactNumber', 'email', 'province', 'municipalityOrCity', 'barangay', 'playerTag', 'paymentRef']
+        .map((f) => ({ [f]: rx }));
+      const digits = q.replace(/\D/g, '');
+      if (digits.length >= 4) {                       // 0917... / +63917... / 63917... all match the same number
+        or.push({ contactNumber: new RegExp(digits.replace(/^(63|0)/, '')) });
+      }
+      filter.$or = or;
+    }
 
     const [total, registrations, occupying, paidOccupying] = await Promise.all([
       Registration.countDocuments(filter),
