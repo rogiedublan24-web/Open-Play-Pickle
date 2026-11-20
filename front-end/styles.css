@@ -1337,3 +1337,59 @@ table.data { min-width: 1240px; }
     stroke-linejoin: round;
   }
 }
+/* Paddle and balls: more space between them (PC / laptop) */
+@media (min-width: 900px) {
+  .hero > .container::before { right: 33%; }      /* paddle: moved left */
+  .hero .container::after   { right: 27%; }       /* small ball: moved left */
+}
+
+@media (min-width: 1100px) {
+  .hero > .container::before { right: 36%; }
+  .hero .container::after   { right: 29%; }
+}
+/* Paddle: more visible on phones */
+@media (max-width: 480px) {
+  .hero > .container::before {
+    right: -6px;
+    top: 28px;
+    scale: .6;
+    opacity: .9;          /* was .3 */
+  }
+  .hero::after { opacity: .75; }   /* big ball a bit clearer too */
+}
+/* Small ball: show it on phones too */
+@media (max-width: 480px) {
+  .hero .container::after {
+    display: block;       /* styles.css hides it on phones */
+    width: 46px;
+    right: 24%;
+    bottom: -4px;         /* sits just above the net */
+    opacity: 1;
+  }
+}
+/* Paddle: lower, handle overlaps the net, never reaches the cards */
+.hero > .container::before {
+  top: auto;
+  bottom: -52px;
+}
+
+@media (min-width: 1100px) {
+  .hero > .container::before {
+    top: auto;
+    bottom: -56px;
+    width: 150px;
+    height: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero > .container::before {
+    top: auto;
+    bottom: -40px;
+    right: 4px;
+    width: 90px;
+    height: 180px;
+    scale: 1;
+    opacity: .85;
+  }
+}
