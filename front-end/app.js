@@ -110,13 +110,19 @@ function showDialog({ kind = 'info', title, message, confirmText = 'OK', cancelT
     actions.appendChild(ok);
 
         form.append(icon, heading, text);
-    if (listenText && 'speechSynthesis' in window) {
-      // A real tap on this button always allows the voice, even on phones
+        if (listenText) {
+      // Always shown. A real tap on this button allows the voice, even on phones.
       const listen = document.createElement('button');
       listen.type = 'button';
       listen.className = 'btn btn-secondary btn-sm modal-listen';
       listen.textContent = '🔊 Listen';
-      listen.addEventListener('click', () => speak(listenText, true));
+      listen.addEventListener('click', () => {
+        if (!('speechSynthesis' in window)) {
+          listen.textContent = 'Voice not supported in this browser';
+          return;
+        }
+        speak(listenText, true);
+      });
       form.appendChild(listen);
     }
     form.appendChild(actions);
