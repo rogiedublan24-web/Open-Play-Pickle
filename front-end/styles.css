@@ -1510,3 +1510,12 @@ table.data { min-width: 1240px; }
   padding: 2px 6px;
   border-radius: 4px;
 }
+.hero:not(.hero-sm) {
+  background:
+    radial-gradient(520px 340px at 88% 6%, rgba(213, 243, 60, .10), transparent 70%),
+    linear-gradient(155deg,
+      rgba(12, 59, 42, .70) 0%,
+      rgba(20, 87, 58, .50) 55%,
+      rgba(29, 122, 75, .35) 100%),
+    url("barangayhall.png") center / cover no-repeat;
+}
