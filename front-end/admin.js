@@ -363,6 +363,8 @@ function currentFilters() {
   if ($('filter-status').value) params.status = $('filter-status').value;
   if ($('filter-tag').value) params.playerTag = $('filter-tag').value;
   if ($('filter-paid').value) params.paid = $('filter-paid').value;
+  const search = $('filter-search').value.trim();
+  if (search) params.q = search;
   return params;
 }
 
@@ -383,6 +385,15 @@ function reloadFromFirstPage() {
   loadRegistrations().catch(handleError);
 }
 
+// Search box: waits a moment after typing, so the list is not reloaded on every key
+let searchTimer = null;
+$('filter-search').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(reloadFromFirstPage, 350);
+});
+$('filter-search').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimer); reloadFromFirstPage(); }
+});
 $('filter-status').addEventListener('change', reloadFromFirstPage);
 $('filter-tag').addEventListener('change', reloadFromFirstPage);
 $('filter-paid').addEventListener('change', reloadFromFirstPage);

@@ -138,7 +138,11 @@
       <section class="card" aria-labelledby="reg-heading">
         <h2 id="reg-heading">Registrations</h2>
 
-        <div class="toolbar">
+          <div class="toolbar">
+          <div class="field search-field">
+            <label for="filter-search">Search player</label>
+            <input id="filter-search" type="search" placeholder="Name, number, barangay, reference..." maxlength="60" autocomplete="off">
+          </div>
           <div class="field small-field">
             <label for="filter-status">Status</label>
             <select id="filter-status">
