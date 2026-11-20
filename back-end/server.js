@@ -178,7 +178,10 @@ app.get('/api/players', async (req, res, next) => {
     res.json(players.map((p) => ({
        displayName: publicName(p.fullName),
       playerTag: p.playerTag,
-      paid: p.paid === true,   // shown as a Paid / Unpaid chip on the public slots
+      paid: p.paid === true,
+      // Paid = the admin checked it. Pending = a reference number was sent, waiting for the admin. Unpaid = nothing sent yet.
+      // (the reference number itself is never sent to the public page)
+      payment: p.paid === true ? 'paid' : (p.paymentRef ? 'pending' : 'unpaid'),  
     })));
   } catch (err) { next(err); }
 });
@@ -192,6 +195,11 @@ async function createRegistration(req, res, next) {
         message: 'Please fix the highlighted fields.',
         details: ['Full name and contact number are required.'],
       });
+    }
+        // Registration closes when the event starts (the countdown on the page reaches zero)
+    
+    if (event.startsAt && Date.now() >= new Date(event.startsAt).getTime()) {
+      return res.status(403).json({ message: 'Registration is closed. The event has already started.' });
     }
 
     const duplicate = await Registration.findOne({
