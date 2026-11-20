@@ -124,6 +124,14 @@
 
         <ol class="slot-grid" id="slot-grid" aria-label="Player slots"></ol>
 
+        
+        <!-- What the Unpaid / Pending / Paid labels mean (shown only when GCash payment is set up) -->
+        <ul class="pay-legend" id="pay-legend" hidden>
+          <li><span class="slot-pay unpaid">Unpaid</span><span>Registered, no payment sent yet.</span></li>
+          <li><span class="slot-pay pending">Pending</span><span>Reference number sent, waiting for the organizer to check it.</span></li>
+          <li><span class="slot-pay paid">Paid</span><span>Payment confirmed by the organizer.</span></li>
+        </ul>
+
         <p class="muted small" id="sync-note" role="status"></p>
       </section>
     </div>

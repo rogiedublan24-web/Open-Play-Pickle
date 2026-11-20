@@ -222,6 +222,7 @@ function renderEvent(ev) {
   paymentRequired = hasPayment;
   $('pay-card').hidden = !hasPayment;
   $('nav-pay').hidden = !hasPayment;            // the Pay button of the menu
+    $('pay-legend').hidden = !hasPayment;         // the Unpaid / Pending / Paid explanation under the slots
   if (hasPayment) {
     $('pay-name').textContent = ev.gcashName || '—';
     $('pay-number').textContent = ev.gcashNumber || '—';
