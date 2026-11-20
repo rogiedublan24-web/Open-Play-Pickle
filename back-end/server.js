@@ -15,7 +15,6 @@ function numberFromEnv(name, fallback) {
 }
 const DEFAULT_MAX_PLAYERS = numberFromEnv('DEFAULT_MAX_PLAYERS', 16);
 
-
 // CORS_ORIGIN in .env is a comma-separated list of allowed origins
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || '')
   .split(',')
@@ -140,7 +139,7 @@ const getEvent = () =>
 // The slot summary used by both the public page and the admin page
 async function getSlots() {
   const settings = await getSettings();
-   const occupied = await Registration.countDocuments({ status: { $in: OCCUPYING } });
+  const occupied = await Registration.countDocuments({ status: { $in: OCCUPYING } });
   return {
     maxPlayers: settings.maxPlayers,
     occupied,
@@ -176,12 +175,12 @@ app.get('/api/players', async (req, res, next) => {
       .sort({ registrationTimestamp: 1 })
       .lean();
     res.json(players.map((p) => ({
-       displayName: publicName(p.fullName),
+      displayName: publicName(p.fullName),
       playerTag: p.playerTag,
       paid: p.paid === true,
       // Paid = the admin checked it. Pending = a reference number was sent, waiting for the admin. Unpaid = nothing sent yet.
       // (the reference number itself is never sent to the public page)
-      payment: p.paid === true ? 'paid' : (p.paymentRef ? 'pending' : 'unpaid'),  
+      payment: p.paid === true ? 'paid' : (p.paymentRef ? 'pending' : 'unpaid'),
     })));
   } catch (err) { next(err); }
 });
@@ -191,10 +190,14 @@ async function createRegistration(req, res, next) {
   try {
     const b = req.body;
     if (!b.fullName || !String(b.fullName).trim() || !b.contactNumber || !String(b.contactNumber).trim()) {
-   return res.status(404).json({ message: 'We could not find that number. Check that it is the same number you registered with, or message the organizer with your GCash receipt.' });
+      return res.status(400).json({
+        message: 'Please fix the highlighted fields.',
+        details: ['Full name and contact number are required.'],
+      });
     }
-        // Registration closes when the event starts (the countdown on the page reaches zero)
-    
+
+    // Registration closes when the event starts (the countdown on the page reaches zero)
+    const event = await getEvent();
     if (event.startsAt && Date.now() >= new Date(event.startsAt).getTime()) {
       return res.status(403).json({ message: 'Registration is closed. The event has already started.' });
     }
@@ -209,7 +212,6 @@ async function createRegistration(req, res, next) {
 
     // When GCash is set up (number or QR), new players wait for payment.
     // The reference number is optional here: the player can send it later after paying.
-    const event = await getEvent();
     const paymentRequired = Boolean(event.gcashNumber || event.gcashQr);
     const paymentRef = String(b.paymentRef || '').replace(/\s+/g, '');
     if (paymentRequired && paymentRef) {
@@ -225,9 +227,7 @@ async function createRegistration(req, res, next) {
       }
     }
 
-    // Slots left -> pending (paid players wait for the admin to verify) or confirmed.
-    // Full -> waitlist (up to MAX_WAITLIST). Both full -> reject.
-       // Slots left -> pending (waiting for payment) or confirmed. No slots left -> reject.
+    // Slots left -> pending (waiting for payment) or confirmed. No slots left -> reject.
     const slots = await getSlots();
     if (slots.availableSlots <= 0) {
       return res.status(409).json({ message: 'Sorry, all slots are taken.' });
@@ -248,7 +248,7 @@ async function createRegistration(req, res, next) {
     });
 
     res.status(201).json({
-           message: status === 'pending'
+      message: status === 'pending'
         ? 'Your slot is reserved. It will be confirmed after your payment is checked.'
         : 'Your slot is reserved!',
       status,
@@ -279,7 +279,7 @@ app.post('/api/payment-ref', refLimiter, async (req, res, next) => {
       });
     }
 
-       // 09171234567, +639171234567 and 639171234567 are the same number: try all three
+    // 09171234567, +639171234567 and 639171234567 are the same number: try all three
     const last10 = contactNumber.replace(/\D/g, '').slice(-10);
     const numberFormats = [contactNumber, `0${last10}`, `+63${last10}`, `63${last10}`];
     const registration = await Registration.findOne({
@@ -287,7 +287,7 @@ app.post('/api/payment-ref', refLimiter, async (req, res, next) => {
       status: { $ne: 'cancelled' },
     });
     if (!registration) {
-      return res.status(404).json({ message: 'We could not find a registration with that contact number.' });
+      return res.status(404).json({ message: 'We could not find that number. Check that it is the same number you registered with, or message the organizer with your GCash receipt.' });
     }
     if (registration.paid) {
       return res.status(409).json({ message: 'Your payment is already confirmed. Thank you!' });
@@ -321,7 +321,8 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
     if (TAGS.includes(req.query.playerTag)) filter.playerTag = req.query.playerTag;
     if (req.query.paid === 'true') filter.paid = true;
     if (req.query.paid === 'false') filter.paid = { $ne: true };   // also matches older records without the field
-        // Search box: matches name, number, email, address, tag or reference. Capital or small letters both work.
+
+    // Search box: matches name, number, email, address, tag or reference. Capital or small letters both work.
     const q = String(req.query.q || '').trim().slice(0, 60);
     if (q) {
       const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');   // the text is searched as plain text, never as a pattern
@@ -372,7 +373,6 @@ app.patch('/api/admin/registrants/:id', requireAdmin, async (req, res, next) => 
       if (!wasOccupying && willOccupy && slots.availableSlots <= 0) {
         return res.status(409).json({ message: 'There are no open slots left. Raise the max players first.' });
       }
-     
       registration.status = status;
     }
 
