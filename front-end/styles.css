@@ -1067,6 +1067,8 @@ table.data { min-width: 1240px; }
 .slot-pay.paid { background: #dcf3e5; color: var(--open); }
 .slot-pay.unpaid { background: #fdefd0; color: var(--warn); }
 .slot.filled.unpaid { border-left-color: var(--sun); }
+.slot-pay.pending { background: var(--court-soft); color: var(--court); }
+.slot.filled.pending { border-left-color: var(--court); }
 
 /* ---------- Player type dropdown (registration form) ---------- */
 #f-playerTag {
@@ -1428,3 +1430,5 @@ table.data { min-width: 1240px; }
 /* ---------- "Listen" button inside the pop-up ---------- */
 .modal-listen { margin: -10px auto 22px; }
   
+/* ---------- Small reminder under the "Already paid?" heading ---------- */
+.ref-form > p.small { margin: -4px 0 12px; }

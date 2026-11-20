@@ -191,10 +191,7 @@ async function createRegistration(req, res, next) {
   try {
     const b = req.body;
     if (!b.fullName || !String(b.fullName).trim() || !b.contactNumber || !String(b.contactNumber).trim()) {
-      return res.status(400).json({
-        message: 'Please fix the highlighted fields.',
-        details: ['Full name and contact number are required.'],
-      });
+   return res.status(404).json({ message: 'We could not find that number. Check that it is the same number you registered with, or message the organizer with your GCash receipt.' });
     }
         // Registration closes when the event starts (the countdown on the page reaches zero)
     

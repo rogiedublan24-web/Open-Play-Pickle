@@ -280,9 +280,13 @@ function updateCountdownTimes(start, end) {
 
 function tickCountdown() {
   const box = $('countdown');
-  if (countdownStart === null) { box.hidden = true; return; }
-
   const now = Date.now();
+
+  // Registration closes when the countdown reaches zero (the event has started)
+  const closed = countdownStart !== null && now >= countdownStart;
+  if (closed !== registrationClosed) { registrationClosed = closed; updateSubmitButton(); }
+
+  if (countdownStart === null) { box.hidden = true; return; }
   const label = $('countdown-label');
   const units = $('countdown-units');
 
@@ -364,16 +368,17 @@ $('pay-copy').addEventListener('click', async () => {
   const number = $('pay-number').textContent.replace(/[\s-]/g, '');
   flashButton($('pay-copy'), (await copyText(number)) ? 'Copied!' : 'Copy failed');
 });
-
 let isFull = false;
 let submitting = false;
+let registrationClosed = false;   // true once the countdown has reached zero
 
 function updateSubmitButton() {
   const btn = $('submit-btn');
-  btn.disabled = submitting || isFull;
+    btn.disabled = submitting || isFull || registrationClosed;
   btn.textContent = submitting ? 'Registering...'
-    : isFull ? 'All slots taken'
-    : 'Reserve my slot';
+    :registrationClosed ? 'Registration closed'
+    :isFull ? 'All slots taken'
+    :'Reserve my slot';
 }
 
 // slots   = { maxPlayers, occupied, availableSlots, isFull }   from GET /slots
@@ -410,7 +415,8 @@ function renderSlots(slots, players) {
   for (let i = 0; i < max; i++) {
     const p = players[i];
     const li = document.createElement('li');
-    li.className = 'slot ' + (p ? 'filled' : 'empty') + (p && paymentRequired && !p.paid ? ' unpaid' : '');
+    const payState = p ? (p.payment || (p.paid ? 'paid' : 'unpaid')) : '';   // paid / pending / unpaid
+    li.className = 'slot ' + (p ? 'filled' : 'empty') + (p && paymentRequired && payState !== 'paid' ? ` ${payState}` : '');
 
     const no = document.createElement('span');
     no.className = 'slot-no';
@@ -431,8 +437,8 @@ function renderSlots(slots, players) {
     // Paid / Unpaid chip (only when GCash payment is set up)
     if (p && paymentRequired) {
       const pay = document.createElement('span');
-      pay.className = 'slot-pay ' + (p.paid ? 'paid' : 'unpaid');
-      pay.textContent = p.paid ? 'Paid' : 'Unpaid';
+      pay.className = 'slot-pay ' + payState;
+      pay.textContent = payState === 'paid' ? 'Paid' : payState === 'pending' ? 'Pending' : 'Unpaid';
       li.appendChild(pay);
     }
     grid.appendChild(li);
@@ -529,8 +535,9 @@ function showMessage(text, kind) {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  showMessage('', '');
-  unlockSpeech();  
+   showMessage('', '');
+  if (registrationClosed) { showMessage('Registration is closed. The event has already started.', 'bad'); return; }
+  unlockSpeech();
 
   const values = {
     fullName: form.fullName.value.trim(),
