@@ -172,8 +172,7 @@ function renderEvent(ev) {
   const hasPayment = Boolean(ev.gcashNumber || ev.gcashQr);
   paymentRequired = hasPayment;
   $('pay-card').hidden = !hasPayment;
-    $('ref-field').hidden = !hasPayment;          // optional reference number in the form
-  $('nav-pay').hidden = !hasPayment;            // the Pay button of the bottom menu
+  $('nav-pay').hidden = !hasPayment;            // the Pay button of the menu
   if (hasPayment) {
     $('pay-name').textContent = ev.gcashName || '—';
     $('pay-number').textContent = ev.gcashNumber || '—';
@@ -204,7 +203,7 @@ let countdownStart = null;
 let countdownEnd = null;
 let countdownTimer = null;
 let shareInfo = { title: document.title, text: document.title };
-let paymentRequired = false;   // true when GCash is set up: new players wait for payment
+let paymentRequired = false;   // true when GCash is set up
 
 function buildCountdownBoxes() {
   const units = $('countdown-units');
@@ -322,19 +321,19 @@ let submitting = false;
 
 function updateSubmitButton() {
   const btn = $('submit-btn');
-    btn.disabled = submitting || isFull;
-    btn.textContent = submitting ? 'Registering...'
+  btn.disabled = submitting || isFull;
+  btn.textContent = submitting ? 'Registering...'
     : isFull ? 'All slots taken'
     : 'Reserve my slot';
 }
 
-// slots   = { maxPlayers, occupied, availableSlots, waitlisted, isFull }   from GET /slots
-// players = [ { displayName, playerTag } ]                                  from GET /players
+// slots   = { maxPlayers, occupied, availableSlots, isFull }   from GET /slots
+// players = [ { displayName, playerTag, paid } ]               from GET /players
 function renderSlots(slots, players) {
   const max = slots.maxPlayers;
   const registered = Math.min(slots.occupied, max);
   const left = slots.availableSlots;
-   isFull = slots.isFull;
+  isFull = slots.isFull;
 
   // Counter and progress bar
   $('slot-registered').textContent = registered;
@@ -351,8 +350,8 @@ function renderSlots(slots, players) {
   if (isFull) { badge.dataset.state = 'full'; badge.textContent = 'Full'; }
   else if (left <= LOW_SLOTS_THRESHOLD) { badge.dataset.state = 'low'; badge.textContent = 'Almost full'; }
   else { badge.dataset.state = 'open'; badge.textContent = 'Open'; }
- 
-     $('slot-left').textContent = isFull
+
+  $('slot-left').textContent = isFull
     ? 'All slots are taken.'
     : `${left} slot${left === 1 ? '' : 's'} left.`;
 
@@ -362,7 +361,7 @@ function renderSlots(slots, players) {
   for (let i = 0; i < max; i++) {
     const p = players[i];
     const li = document.createElement('li');
-        li.className = 'slot ' + (p ? 'filled' : 'empty') + (p && paymentRequired && !p.paid ? ' unpaid' : '');
+    li.className = 'slot ' + (p ? 'filled' : 'empty') + (p && paymentRequired && !p.paid ? ' unpaid' : '');
 
     const no = document.createElement('span');
     no.className = 'slot-no';
@@ -376,8 +375,9 @@ function renderSlots(slots, players) {
     if (p?.playerTag) {
       const tag = document.createElement('span');
       tag.className = 'slot-skill';
+      tag.dataset.tag = p.playerTag;
       tag.textContent = p.playerTag;
-           li.appendChild(tag);
+      li.appendChild(tag);
     }
     // Paid / Unpaid chip (only when GCash payment is set up)
     if (p && paymentRequired) {
@@ -462,7 +462,6 @@ function validate(v) {
   check('province', !v.province, 'Please enter your province.');
   check('municipalityOrCity', !v.municipalityOrCity, 'Please enter your municipality or city.');
   check('barangay', !v.barangay, 'Please enter your barangay.');
-  check('paymentRef', paymentRequired && v.paymentRef && !/^\d{13}$/.test(v.paymentRef), 'The GCash reference number must be 13 digits.');
   check('consent', !v.consent, 'Your consent is required to appear on the player list.');
   return ok;
 }
@@ -485,7 +484,6 @@ form.addEventListener('submit', async (e) => {
     municipalityOrCity: form.municipalityOrCity.value.trim(),
     barangay: form.barangay.value.trim(),
     playerTag: form.playerTag.value,
-    paymentRef: form.paymentRef.value.replace(/\s+/g, ''),
     consent: form.consent.checked,
   };
 
@@ -498,7 +496,6 @@ form.addEventListener('submit', async (e) => {
   const { consent, ...payload } = values;
   payload.showOnPublicList = consent;   // the player agreed to appear on the public list
   if (!payload.email) delete payload.email;
-  if (!paymentRequired || !payload.paymentRef) delete payload.paymentRef;
 
   submitting = true;
   updateSubmitButton();
@@ -509,7 +506,7 @@ form.addEventListener('submit', async (e) => {
 
     // Pop-up box after a successful registration
     const firstName = payload.fullName.split(/\s+/)[0];
-       showDialog({
+    showDialog({
       kind: 'success',
       title: 'You are already registered!',
       message: result.status === 'pending'
@@ -559,14 +556,15 @@ $('ref-form').addEventListener('submit', async (e) => {
 });
 
 /* =====================================================================
-   6c. BOTTOM MENU - highlights the section you are looking at
+   6c. MENU - highlights the section you are looking at
    ===================================================================== */
 const navLinks = [...document.querySelectorAll('#bottom-nav a')];
 let navTicking = false;
 
 function updateBottomNav() {
   navTicking = false;
-  const visible = navLinks.filter((a) => !a.hidden);
+  const desktop = window.innerWidth >= 900;   // on PC the Register card is always on screen
+  const visible = navLinks.filter((a) => !a.hidden && !(desktop && a.dataset.target === 'register'));
   const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
   let current = visible[0];
 
@@ -588,6 +586,7 @@ window.addEventListener('scroll', () => {
 }, { passive: true });
 window.addEventListener('resize', updateBottomNav);
 updateBottomNav();
+
 /* =====================================================================
    7. START
    ===================================================================== */

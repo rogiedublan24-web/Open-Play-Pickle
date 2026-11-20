@@ -1393,3 +1393,24 @@ table.data { min-width: 1240px; }
     opacity: .85;
   }
 }
+
+    @media (max-width: 899px) {
+      .layout { display: flex; flex-direction: column; gap: 16px; }
+      .col-main, .col-side { display: contents; }
+      #info-card  { order: 1; }
+      #register   { order: 2; position: static; }
+      #pay-card   { order: 3; }
+      #slots-card { order: 4; }
+      .layout > .card, .col-main > .card, .col-side > .card { margin: 0; }
+    }
+    .pay-notice {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff7e0;
+  border: 1px solid #f0d98a;
+  color: #5a4600;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+  
