@@ -1492,3 +1492,21 @@ table.data { min-width: 1240px; }
 }
 .pay-legend li { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 12px; }
 .pay-legend .slot-pay { margin: 0; justify-self: start; }
+
+/*parasa notice ng contact no.*/
+.notice {
+  background: #fff8e1;
+  border-left: 5px solid #f5a623;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #3a2e00;
+}
+
+.hl {
+  background: #ffe066;
+  color: #000;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
