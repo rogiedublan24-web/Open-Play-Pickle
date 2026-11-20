@@ -109,20 +109,14 @@ function showDialog({ kind = 'info', title, message, confirmText = 'OK', cancelT
     if (!cancelText) ok.autofocus = true;
     actions.appendChild(ok);
 
-        form.append(icon, heading, text);
-        if (listenText) {
+    form.append(icon, heading, text);
+    if (listenText) {
       // Always shown. A real tap on this button allows the voice, even on phones.
       const listen = document.createElement('button');
       listen.type = 'button';
       listen.className = 'btn btn-secondary btn-sm modal-listen';
       listen.textContent = '🔊 Listen';
-      listen.addEventListener('click', () => {
-        if (!('speechSynthesis' in window)) {
-          listen.textContent = 'Voice not supported in this browser';
-          return;
-        }
-        speak(listenText, true);
-      });
+      listen.addEventListener('click', () => playVoice(listenText, true));
       form.appendChild(listen);
     }
     form.appendChild(actions);
@@ -140,13 +134,41 @@ function showDialog({ kind = 'info', title, message, confirmText = 'OK', cancelT
     dialog.showModal();
   });
 }
- 
+
 /* =====================================================================
    3b. VOICE - the browser reads a message out loud (free, built in, no AI service)
    ===================================================================== */
+// A recorded voice file (works in every browser, including Messenger/Facebook).
+// Put your file in the same folder as index.html and name it: registered.mp3
+const voiceFiles = {
+  confirmed: new Audio('registered.mp3'),       // "Thank you! Your slot is reserved. See you on the court!"
+  pending: new Audio('registered-pay.mp3'),     // the one that mentions paying online or at the event
+};
+Object.values(voiceFiles).forEach((audio) => { audio.preload = 'auto'; });
+let doneAudio = voiceFiles.confirmed;           // the file for the current registration
+
+function playVoice(text, immediate = false) {
+  // Normal browsers (Chrome, Safari...): the natural voice of the phone, which can say the player's name.
+  if ('speechSynthesis' in window) { speak(text, immediate); return; }
+  // Browsers with no voice (Messenger / Facebook): play the recorded file instead.
+  try {
+    doneAudio.muted = false;
+    doneAudio.currentTime = 0;
+    const played = doneAudio.play();
+    if (played && played.catch) played.catch(() => { /* blocked: the message is still shown in the pop-up */ });
+  } catch { /* ignore */ }
+}
+
 // Phones only allow speech that starts from a tap. Call this at the very start of the
 // button handler (before any waiting) so the later speak() is allowed.
 function unlockSpeech() {
+  Object.values(voiceFiles).forEach((audio) => {   // unlock the recorded voices too
+    try {
+      audio.muted = true;
+      audio.play().then(() => { audio.pause(); audio.currentTime = 0; audio.muted = false; })
+        .catch(() => { audio.muted = false; });
+    } catch { /* ignore */ }
+  });
   if (!('speechSynthesis' in window)) return;
   try {
     const quiet = new SpeechSynthesisUtterance(' ');
@@ -155,25 +177,52 @@ function unlockSpeech() {
   } catch { /* ignore */ }
 }
 
+let currentVoice = null;   // keep a reference: some phone browsers drop it and the voice goes silent
+
+function pickVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find((v) => /^en[-_]/i.test(v.lang) && /google|samantha|siri/i.test(v.name))
+    || voices.find((v) => /^en[-_]/i.test(v.lang))
+    || null;
+}
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.addEventListener?.('voiceschanged', pickVoice);   // phones load voices late
+}
+
 function speak(text, immediate = false) {
   if (!('speechSynthesis' in window)) return;     // older browsers: just stay silent
   try {
     const synth = window.speechSynthesis;
     synth.cancel();
     const voice = new SpeechSynthesisUtterance(text);
-    voice.lang = 'en-US';
+    const chosen = pickVoice();
+    if (chosen) voice.voice = chosen;
+    voice.lang = chosen ? chosen.lang : 'en-US';
     voice.rate = 1;
     voice.pitch = 1.05;
     voice.volume = 1;
-    synth.resume();                               // fixes a "stuck" voice in some phone browsers
-    if (immediate) synth.speak(voice);            // from a button tap: speak right now
-    else setTimeout(() => synth.speak(voice), 90); // small delay: cancel() and speak() together can be dropped     // small delay: cancel() and speak() together can be dropped
+    currentVoice = voice;                         // do not let it be garbage-collected
+
+    let started = false;
+    voice.onstart = () => { started = true; };
+    const go = () => { synth.resume(); synth.speak(voice); };
+    if (immediate) go(); else setTimeout(go, 80);
+
+    // if nothing started after a moment, try once more
+    setTimeout(() => {
+      if (!started && currentVoice === voice && !synth.speaking) {
+        synth.cancel();
+        synth.speak(voice);
+      }
+    }, 1200);
   } catch { /* the voice is a bonus, never break the page */ }
 }
 
 function stopSpeaking() {
+  Object.values(voiceFiles).forEach((audio) => { try { audio.pause(); audio.currentTime = 0; } catch { /* ignore */ } });
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
+
 /* =====================================================================
    4. RENDERING - uses textContent (not innerHTML) so a malicious name
       cannot inject HTML or scripts (XSS protection)
@@ -221,7 +270,7 @@ function renderEvent(ev) {
   const hasPayment = Boolean(ev.gcashNumber || ev.gcashQr);
   paymentRequired = hasPayment;
   $('pay-card').hidden = !hasPayment;
-  $('nav-pay').hidden = !hasPayment;            // the Pay button of the menu
+  $('nav-pay').hidden = !hasPayment;            // the Pay button of the bottom menu
   $('pay-legend').hidden = !hasPayment;         // the Unpaid / Pending / Paid explanation under the slots
   if (hasPayment) {
     $('pay-name').textContent = ev.gcashName || '—';
@@ -253,7 +302,7 @@ let countdownStart = null;
 let countdownEnd = null;
 let countdownTimer = null;
 let shareInfo = { title: document.title, text: document.title };
-let paymentRequired = false;   // true when GCash is set up
+let paymentRequired = false;   // true when GCash is set up: a reference number is needed
 
 function buildCountdownBoxes() {
   const units = $('countdown-units');
@@ -288,6 +337,7 @@ function tickCountdown() {
   if (closed !== registrationClosed) { registrationClosed = closed; updateSubmitButton(); }
 
   if (countdownStart === null) { box.hidden = true; return; }
+
   const label = $('countdown-label');
   const units = $('countdown-units');
 
@@ -369,23 +419,40 @@ $('pay-copy').addEventListener('click', async () => {
   const number = $('pay-number').textContent.replace(/[\s-]/g, '');
   flashButton($('pay-copy'), (await copyText(number)) ? 'Copied!' : 'Copy failed');
 });
+
 let isFull = false;
+let currentMode = 'open';   // 'open' = Open Play form, 'team' = By Team form (the organizer chooses in Admin)
 let submitting = false;
 let registrationClosed = false;   // true once the countdown has reached zero
 
 function updateSubmitButton() {
-  const btn = $('submit-btn');
-    btn.disabled = submitting || isFull || registrationClosed;
+  const team = currentMode === 'team';
+  const btn = $(team ? 'team-submit-btn' : 'submit-btn');
+  btn.disabled = submitting || isFull || registrationClosed;
   btn.textContent = submitting ? 'Registering...'
-    :registrationClosed ? 'Registration closed'
-    :isFull ? 'All slots taken'
-    :'Reserve my slot';
+    : registrationClosed ? 'Registration closed'
+    : isFull ? (team ? 'All team slots taken' : 'All slots taken')
+    : (team ? 'Reserve our team slot' : 'Reserve my slot');
 }
 
-// slots   = { maxPlayers, occupied, availableSlots, isFull }   from GET /slots
-// players = [ { displayName, playerTag, paid } ]               from GET /players
+// Shows the Open Play form or the By Team form, and changes the words to match
+function applyMode(mode) {
+  const m = mode === 'team' ? 'team' : 'open';
+  currentMode = m;
+  const team = m === 'team';
+  $('reg-form').hidden = team;
+  $('team-form').hidden = !team;
+  $('reg-heading').textContent = team ? 'Register your team' : 'Register';
+  $('counter-label').textContent = team ? 'teams' : 'players';
+  $('slot-grid').setAttribute('aria-label', team ? 'Team slots' : 'Player slots');
+}
+
+// slots   = { maxPlayers, occupied, availableSlots, waitlisted, isFull }   from GET /slots
+// players = [ { displayName, playerTag } ]                                  from GET /players
 function renderSlots(slots, players) {
-  const max = slots.maxPlayers;
+  applyMode(slots.mode);
+  const team = currentMode === 'team';
+  const max = slots.max ?? slots.maxPlayers;
   const registered = Math.min(slots.occupied, max);
   const left = slots.availableSlots;
   isFull = slots.isFull;
@@ -408,7 +475,7 @@ function renderSlots(slots, players) {
 
   $('slot-left').textContent = isFull
     ? 'All slots are taken.'
-    : `${left} slot${left === 1 ? '' : 's'} left.`;
+    : `${left} ${team ? 'team ' : ''}slot${left === 1 ? '' : 's'} left.`;
 
   // Slot grid: one cell per slot (filled or empty)
   const grid = $('slot-grid');
@@ -421,14 +488,14 @@ function renderSlots(slots, players) {
 
     const no = document.createElement('span');
     no.className = 'slot-no';
-    no.textContent = `Slot ${i + 1}`;
+    no.textContent = `${team ? 'Team' : 'Slot'} ${i + 1}`;
 
     const name = document.createElement('span');
     name.className = 'slot-name';
     name.textContent = p ? p.displayName : 'Available';
 
     li.append(no, name);
-    if (p?.playerTag) {
+    if (p?.playerTag && !team) {
       const tag = document.createElement('span');
       tag.className = 'slot-skill';
       tag.dataset.tag = p.playerTag;
@@ -536,9 +603,9 @@ function showMessage(text, kind) {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
-   showMessage('', '');
+  showMessage('', '');
   if (registrationClosed) { showMessage('Registration is closed. The event has already started.', 'bad'); return; }
-  unlockSpeech();
+  unlockSpeech();                       // allow the voice on phones (must happen right on the tap)
 
   const values = {
     fullName: form.fullName.value.trim(),
@@ -569,12 +636,11 @@ form.addEventListener('submit', async (e) => {
     form.reset();
 
     // Pop-up box after a successful registration
-   
-    // Pop-up box after a successful registration
     const firstName = payload.fullName.split(/\s+/)[0];
     const doneMessage = result.status === 'pending'
       ? `Thank you, ${firstName}. Your slot is reserved. You can pay online using the "How to pay" box and send your GCash reference number, or just pay when you arrive at the event.`
       : `Thank you, ${firstName}. Your slot is reserved. See you on the court!`;
+    doneAudio = voiceFiles[result.status === 'pending' ? 'pending' : 'confirmed'];   // pick the matching recording
     showDialog({
       kind: 'success',
       title: 'You are already registered!',
@@ -582,11 +648,93 @@ form.addEventListener('submit', async (e) => {
       listenText: doneMessage,
       confirmText: 'Got it',
     }).then(stopSpeaking);
-    speak(doneMessage);                               // a voice reads the message out loud
+    playVoice(doneMessage);                           // play the recorded voice (or the browser voice)
+
     await refresh();                                  // update the slots right away
   } catch (err) {
     showMessage(err.details.length ? err.details.join(' ') : err.message, 'bad');
     if (err.status === 409) await refresh();          // may have just filled up: resync the display
+  } finally {
+    submitting = false;
+    updateSubmitButton();
+  }
+});
+
+/* =====================================================================
+   6a. BY TEAM FORM - one team = 2 players, one payment per team
+   ===================================================================== */
+const teamForm = $('team-form');
+
+function setTeamError(name, message) {
+  const input = $(`tf-${name}`);
+  $(`terr-${name}`).textContent = message || '';
+  input.closest('.field').classList.toggle('invalid', Boolean(message));
+  input.setAttribute('aria-invalid', message ? 'true' : 'false');
+}
+
+function validateTeam(v) {
+  let ok = true;
+  const check = (name, bad, msg) => { setTeamError(name, bad ? msg : ''); if (bad) ok = false; };
+  check('teamName', v.teamName.length < 2, 'Please enter your team name (at least 2 characters).');
+  check('fullName', v.fullName.length < 2, 'Please enter the captain\'s full name.');
+  check('contactNumber', !PH_MOBILE.test(v.contactNumber), 'Enter a valid PH mobile number, e.g. 0917 123 4567.');
+  check('partnerName', v.partnerName.length < 2, 'Please enter Player 2\'s name.');
+  check('consent', !v.consent, 'Your consent is required to show the team name on the list.');
+  return ok;
+}
+
+function showTeamMessage(text, kind) {
+  const el = $('team-form-msg');
+  el.textContent = text;
+  el.className = 'form-msg' + (kind ? ` ${kind}` : '');
+}
+
+teamForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  showTeamMessage('', '');
+  if (registrationClosed) { showTeamMessage('Registration is closed. The event has already started.', 'bad'); return; }
+  unlockSpeech();                       // allow the voice on phones (must happen right on the tap)
+
+  const values = {
+    teamName: teamForm.teamName.value.trim(),
+    fullName: teamForm.fullName.value.trim(),
+    contactNumber: teamForm.contactNumber.value.replace(/[\s-]/g, ''),
+    partnerName: teamForm.partnerName.value.trim(),
+    consent: teamForm.consent.checked,
+  };
+  if (!validateTeam(values)) {
+    teamForm.querySelector('.invalid input')?.focus();
+    return;
+  }
+
+  const { consent, ...payload } = values;
+  payload.showOnPublicList = consent;
+
+  submitting = true;
+  updateSubmitButton();
+
+  try {
+    const result = await api.register(payload);
+    teamForm.reset();
+
+    const firstName = payload.fullName.split(/\s+/)[0];
+    const doneMessage = result.status === 'pending'
+      ? `Thank you, ${firstName}. Your team ${payload.teamName} is registered. You can pay online using the "How to pay" box and send your GCash reference number, or just pay when you arrive at the event.`
+      : `Thank you, ${firstName}. Your team ${payload.teamName} is registered. See you on the court!`;
+    doneAudio = voiceFiles[result.status === 'pending' ? 'pending' : 'confirmed'];
+    showDialog({
+      kind: 'success',
+      title: 'Your team is registered!',
+      message: doneMessage,
+      listenText: doneMessage,
+      confirmText: 'Got it',
+    }).then(stopSpeaking);
+    playVoice(doneMessage);
+
+    await refresh();
+  } catch (err) {
+    showTeamMessage(err.details.length ? err.details.join(' ') : err.message, 'bad');
+    if (err.status === 409) await refresh();
   } finally {
     submitting = false;
     updateSubmitButton();
@@ -624,7 +772,7 @@ $('ref-form').addEventListener('submit', async (e) => {
 });
 
 /* =====================================================================
-   6c. MENU - highlights the section you are looking at
+   6c. BOTTOM MENU - highlights the section you are looking at
    ===================================================================== */
 const navLinks = [...document.querySelectorAll('#bottom-nav a')];
 let navTicking = false;

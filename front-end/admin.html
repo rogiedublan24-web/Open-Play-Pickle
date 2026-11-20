@@ -34,6 +34,22 @@
     <!-- ADMIN PANEL (hidden until the key is accepted) -->
     <div class="admin-panel" id="admin-panel" hidden>
 
+      <section class="card" aria-labelledby="mode-heading">
+        <h2 id="mode-heading">Registration type</h2>
+        <p class="muted small">Only one type is active at a time. The public page shows the matching form and list. The other list is hidden, not deleted.</p>
+        <div class="toolbar">
+          <div class="field small-field">
+            <label for="mode-select">Active registration</label>
+            <select id="mode-select">
+              <option value="open">Open Play (single players)</option>
+              <option value="team">By Team (2 players per team)</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-sm" id="mode-btn" type="button">Switch</button>
+        </div>
+        <p class="form-msg" id="mode-msg" role="status" aria-live="polite"></p>
+      </section>
+
       <section class="card" aria-labelledby="slots-heading">
         <div class="card-head">
           <h2 id="slots-heading">Slots</h2>
@@ -41,16 +57,16 @@
         </div>
 
         <div class="stats">
-          <div class="stat"><b id="sum-occupied">–</b><span>Players</span></div>
+          <div class="stat"><b id="sum-occupied">–</b><span id="lbl-occupied">Players</span></div>
           <div class="stat"><b id="sum-available">–</b><span>Available</span></div>
-          <div class="stat"><b id="sum-max">–</b><span>Max players</span></div>
+          <div class="stat"><b id="sum-max">–</b><span id="lbl-max">Max players</span></div>
           <div class="stat"><b id="sum-paid">–</b><span>Paid</span></div>
           <div class="stat"><b id="sum-unpaid">–</b><span>Unpaid</span></div>
         </div>
 
         <form id="max-form" class="toolbar" novalidate>
           <div class="field small-field">
-            <label for="max-input">Change maximum players</label>
+            <label for="max-input" id="max-label">Change maximum players</label>
             <input id="max-input" type="number" min="1" max="200" step="1" inputmode="numeric">
           </div>
           <button class="btn btn-primary btn-sm" id="max-btn" type="submit">Save maximum</button>
@@ -107,16 +123,16 @@
 
           <div class="grid-2">
             <div class="field">
-              <label for="ev-gcash-name">GCash name <span class="muted"></span></label>
+              <label for="ev-gcash-name">GCash name <span class="muted">(optional)</span></label>
               <input id="ev-gcash-name" type="text" maxlength="60" placeholder="e.g. Juan D.">
             </div>
             <div class="field">
-              <label for="ev-gcash-number">GCash number <span class="muted"></span></label>
+              <label for="ev-gcash-number">GCash number <span class="muted">(optional)</span></label>
               <input id="ev-gcash-number" type="text" inputmode="tel" maxlength="20" placeholder="09XX XXX XXXX">
             </div>
           </div>
           <div class="field">
-            <label for="ev-gcash-qr">GCash QR code <span class="muted"></span></label>
+            <label for="ev-gcash-qr">GCash QR code <span class="muted">(optional image)</span></label>
             <input id="ev-gcash-qr" type="file" accept="image/png,image/jpeg,image/webp">
             <div class="qr-preview" id="qr-preview" hidden>
               <img id="qr-img" alt="GCash QR preview">
@@ -138,10 +154,10 @@
       <section class="card" aria-labelledby="reg-heading">
         <h2 id="reg-heading">Registrations</h2>
 
-          <div class="toolbar">
+        <div class="toolbar">
           <div class="field search-field">
             <label for="filter-search">Search player</label>
-            <input id="filter-search" type="search" placeholder="Name, number, barangay, reference..." maxlength="60" autocomplete="off">
+            <input id="filter-search" type="search" placeholder="Name, team, number, barangay, reference..." maxlength="60" autocomplete="off">
           </div>
           <div class="field small-field">
             <label for="filter-status">Status</label>
@@ -152,7 +168,7 @@
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
-          <div class="field small-field">
+          <div class="field small-field" id="tag-field">
             <label for="filter-tag">Player tag</label>
             <select id="filter-tag">
               <option value="">All</option>
@@ -176,15 +192,15 @@
         <p class="form-msg" id="admin-msg" role="status" aria-live="polite"></p>
 
         <div class="table-wrap">
-          <table class="data">
+          <table class="data" id="reg-table">
             <thead>
               <tr>
                 <th>#</th>
-                <th>Player</th>
+                <th id="th-player">Player</th>
                 <th>Contact</th>
-                <th>Address</th>
+                <th class="col-addr">Address</th>
                 <th>Registered</th>
-                <th>Tag</th>
+                <th class="col-tag">Tag</th>
                 <th>Status</th>
                 <th>Payment</th>
                 <th>Action</th>

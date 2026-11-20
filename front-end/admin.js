@@ -23,6 +23,8 @@ let adminKey = '';
 try { sessionStorage.removeItem(KEY_STORAGE); } catch { /* storage blocked */ }
 
 let page = 1;
+let currentMode = 'open';    // 'open' = Open Play, 'team' = By Team (the server decides)
+let lastOccupied = 0;        // used in the switch warning
 
 /* =====================================================================
    2. API LAYER - same idea as the public page, plus the x-admin-key header
@@ -72,7 +74,10 @@ const api = {
   getRegistrations: (params) => request(`/admin/registrants?${new URLSearchParams(params)}`),
   updateRegistration: (id, body) => request(`/admin/registrants/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRegistration: (id) => request(`/admin/registrants/${id}`, { method: 'DELETE' }),
-  setMaxPlayers: (maxPlayers) => request('/settings/max-players', { method: 'PATCH', body: JSON.stringify({ maxPlayers }) }),
+  setMax: (value, mode) => request('/settings/max-players', {
+    method: 'PATCH',
+    body: JSON.stringify(mode === 'team' ? { maxTeams: value } : { maxPlayers: value }),
+  }),
   getEvent: () => request('/admin/event'),
   updateEvent: (body) => request('/admin/event', { method: 'PATCH', body: JSON.stringify(body) }),
 };
@@ -177,11 +182,28 @@ function handleError(err) {
 /* =====================================================================
    5. SLOT SUMMARY AND MAX PLAYERS
    ===================================================================== */
+// Changes the words and the table columns to match the active mode
+function applyMode(mode) {
+  const m = mode === 'team' ? 'team' : 'open';
+  currentMode = m;
+  const team = m === 'team';
+  if (document.activeElement !== $('mode-select')) $('mode-select').value = m;
+  $('lbl-occupied').textContent = team ? 'Teams' : 'Players';
+  $('lbl-max').textContent = team ? 'Max teams' : 'Max players';
+  $('max-label').textContent = team ? 'Change maximum teams' : 'Change maximum players';
+  $('th-player').textContent = team ? 'Team' : 'Player';
+  $('filter-search').closest('.field').querySelector('label').textContent = team ? 'Search team' : 'Search player';
+  $('tag-field').hidden = team;
+  $('reg-table').dataset.mode = m;
+}
+
 function renderSlotSummary(s) {
+  if (s.mode) applyMode(s.mode);
+  lastOccupied = s.occupied;
   $('sum-occupied').textContent = s.occupied;
   $('sum-available').textContent = s.availableSlots;
-  $('sum-max').textContent = s.maxPlayers;
-  if (document.activeElement !== $('max-input')) $('max-input').value = s.maxPlayers;
+  $('sum-max').textContent = s.max ?? s.maxPlayers;
+  if (document.activeElement !== $('max-input')) $('max-input').value = s.max ?? s.maxPlayers;
 }
 
 async function loadSlots() {
@@ -200,7 +222,7 @@ $('max-form').addEventListener('submit', async (e) => {
   const btn = $('max-btn');
   btn.disabled = true;
   try {
-    const result = await api.setMaxPlayers(value);   // response already contains the new slot summary
+    const result = await api.setMax(value, currentMode);   // response already contains the new slot summary
     renderSlotSummary(result);
     showMessage(result.message, 'ok');
   } catch (err) {
@@ -252,9 +274,14 @@ function buildRow(reg, number) {
     timeZone: TIMEZONE, dateStyle: 'medium', timeStyle: 'short',
   });
 
-  const tagSelect = makeSelect(TAGS, reg.playerTag, `Tag for ${reg.fullName}`);
-  const statusSelect = makeSelect(STATUSES, reg.status, `Status for ${reg.fullName}`);
-  const paidSelect = makeSelect(PAYMENT, reg.paid ? 'Paid' : 'Unpaid', `Payment for ${reg.fullName}`);
+  const isTeam = reg.kind === 'team';
+  const label = isTeam ? (reg.teamName || reg.fullName) : reg.fullName;   // used in messages
+  const tagSelect = makeSelect(TAGS, reg.playerTag, `Tag for ${label}`);
+  tagSelect.className = 'tag-select';
+  tagSelect.dataset.tag = reg.playerTag;
+  tagSelect.addEventListener('change', () => { tagSelect.dataset.tag = tagSelect.value; });
+  const statusSelect = makeSelect(STATUSES, reg.status, `Status for ${label}`);
+  const paidSelect = makeSelect(PAYMENT, reg.paid ? 'Paid' : 'Unpaid', `Payment for ${label}`);
   paidSelect.className = 'paid-select';
   paidSelect.dataset.paid = String(Boolean(reg.paid));
   paidSelect.addEventListener('change', () => {
@@ -276,7 +303,7 @@ function buildRow(reg, number) {
         playerTag: tagSelect.value,
         paid: paidSelect.value === 'Paid',
       });
-      showMessage(`${result.registration.fullName}: ${result.message}`, 'ok');
+      showMessage(`${label}: ${result.message}`, 'ok');
       await Promise.all([loadRegistrations(), loadSlots()]);
     } catch (err) {
       handleError(err);
@@ -292,8 +319,8 @@ function buildRow(reg, number) {
     // Pop-up box: "Are you sure?" (Cancel is selected by default)
     const sure = await showDialog({
       kind: 'danger',
-      title: 'Delete this registration?',
-      message: `${reg.fullName} will be removed from the list. This cannot be undone.`,
+      title: isTeam ? 'Delete this team?' : 'Delete this registration?',
+      message: `${label} will be removed from the list. This cannot be undone.`,
       confirmText: 'Yes, delete',
       cancelText: 'Cancel',
     });
@@ -317,13 +344,21 @@ function buildRow(reg, number) {
   actions.className = 'actions';
   actions.append(saveBtn, deleteBtn);
 
+  const playerCell = isTeam
+    ? cell(textWithSub(reg.teamName || '(no team name)', `P1: ${reg.fullName} · P2: ${reg.partnerName || '-'}`))
+    : cell(textWithSub(reg.fullName, reg.email));
+  const addressCell = cell(address);
+  addressCell.className = 'col-addr';
+  const tagCell = cell(tagSelect);
+  tagCell.className = 'col-tag';
+
   tr.append(
     cell(String(number)),
-    cell(textWithSub(reg.fullName, reg.email)),
+    playerCell,
     cell(textWithSub(reg.contactNumber, reg.paymentRef ? `Ref: ${reg.paymentRef}` : '')),
-    cell(address),
+    addressCell,
     cell(registered),
-    cell(tagSelect),
+    tagCell,
     cell(statusSelect),
     cell(paidSelect),
     cell(actions),
@@ -331,7 +366,8 @@ function buildRow(reg, number) {
   return tr;
 }
 
-function renderTable({ total, registrations, paidCount, unpaidCount }) {
+function renderTable({ total, registrations, paidCount, unpaidCount, mode }) {
+  if (mode) applyMode(mode);
   const body = $('reg-body');
   body.replaceChildren();
 
@@ -394,6 +430,7 @@ $('filter-search').addEventListener('input', () => {
 $('filter-search').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimer); reloadFromFirstPage(); }
 });
+
 $('filter-status').addEventListener('change', reloadFromFirstPage);
 $('filter-tag').addEventListener('change', reloadFromFirstPage);
 $('filter-paid').addEventListener('change', reloadFromFirstPage);
@@ -443,11 +480,26 @@ async function exportCsv() {
       return;
     }
 
-    const header = [
+    const team = currentMode === 'team';
+    const header = team ? [
+      'No.', 'Team name', 'Player 1 (captain)', 'Contact number', 'Player 2',
+      'Status', 'Payment', 'GCash reference', 'On public list', 'Registered (PH time)',
+    ] : [
       'No.', 'Full name', 'Contact number', 'Email', 'Province', 'Municipality / City',
       'Barangay', 'Player tag', 'Status', 'Payment', 'GCash reference', 'On public list', 'Registered (PH time)',
     ];
-    const rows = all.map((r, i) => [
+    const rows = all.map((r, i) => team ? [
+      csvCell(i + 1),
+      csvCell(r.teamName),
+      csvCell(r.fullName),
+      csvCell(r.contactNumber, { phone: true }),
+      csvCell(r.partnerName),
+      csvCell(r.status),
+      csvCell(r.paid ? 'Paid' : 'Unpaid'),
+      csvCell(r.paymentRef, { phone: true }),
+      csvCell(r.showOnPublicList ? 'Yes' : 'No'),
+      csvCell(formatManila(r.registrationTimestamp)),
+    ] : [
       csvCell(i + 1),
       csvCell(r.fullName),
       csvCell(r.contactNumber, { phone: true }),
@@ -469,7 +521,7 @@ async function exportCsv() {
 
     const link = document.createElement('a');
     link.href = url;
-    link.download = `registrations-${today}.csv`;
+    link.download = `${currentMode === 'team' ? 'teams' : 'registrations'}-${today}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -484,6 +536,51 @@ async function exportCsv() {
 }
 
 $('export-btn').addEventListener('click', exportCsv);
+
+/* =====================================================================
+   6c. SWITCH REGISTRATION TYPE - Open Play <-> By Team
+   ===================================================================== */
+function showModeMessage(text, kind) {
+  const el = $('mode-msg');
+  el.textContent = text;
+  el.className = 'form-msg' + (kind ? ` ${kind}` : '');
+}
+
+$('mode-btn').addEventListener('click', async () => {
+  showModeMessage('', '');
+  const target = $('mode-select').value;
+  if (target === currentMode) return showModeMessage('That type is already active.', '');
+
+  const toTeam = target === 'team';
+  const hiding = lastOccupied;
+  const hidden = currentMode === 'team' ? 'teams' : 'Open Play players';
+  const sure = await showDialog({
+    kind: 'danger',
+    title: toTeam ? 'Switch to By Team?' : 'Switch to Open Play?',
+    message: `Switching to ${toTeam ? 'By Team' : 'Open Play'} will hide the ${hiding} ${hiding === 1 ? hidden.replace(/s$/, '') : hidden} now on the list. They are not deleted, and they come back when you switch again. The public page will show the ${toTeam ? 'team' : 'player'} form and list right away.`,
+    confirmText: 'Yes, switch',
+    cancelText: 'Cancel',
+  });
+  if (!sure) { $('mode-select').value = currentMode; return; }
+
+  const btn = $('mode-btn');
+  btn.disabled = true;
+  try {
+    await api.updateEvent({ mode: target });
+    page = 1;
+    $('filter-search').value = '';
+    $('filter-status').value = '';
+    $('filter-tag').value = '';
+    $('filter-paid').value = '';
+    await Promise.all([loadRegistrations(), loadSlots()]);
+    showModeMessage(`Now using ${toTeam ? 'By Team' : 'Open Play'} registration.`, 'ok');
+  } catch (err) {
+    if (err.status === 401) return logout('Your admin key was rejected. Please sign in again.');
+    showModeMessage(errorText(err), 'bad');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 /* =====================================================================
    7. SIGN IN / SIGN OUT

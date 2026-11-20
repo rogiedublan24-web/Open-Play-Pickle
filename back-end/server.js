@@ -32,6 +32,8 @@ const STATUSES = ['pending', 'confirmed', 'cancelled'];
 const TAGS = ['Bagong Manlalaro', 'Regular', 'Bisita'];
 const OCCUPYING = ['pending', 'confirmed'];   // statuses that take up a slot
 const NEW_REGISTRATION_STATUS = 'confirmed';    // status given to new players when slots are free
+const MODES = ['open', 'team'];                 // 'open' = Open Play (single players), 'team' = By Team (2 players per team)
+const DEFAULT_MAX_TEAMS = numberFromEnv('DEFAULT_MAX_TEAMS', 8);
 
 const app = express();
 
@@ -97,6 +99,9 @@ const registrationSchema = new mongoose.Schema({
   showOnPublicList: { type: Boolean, default: false },
   paid: { type: Boolean, default: false },   // only the admin can change this
   paymentRef: { type: String, trim: true, default: '' },   // 13-digit GCash reference number
+  kind: { type: String, enum: ['player', 'team'], default: 'player' },   // older records have no kind = player
+  teamName: { type: String, trim: true, default: '', maxlength: 40 },    // By Team only
+  partnerName: { type: String, trim: true, default: '', maxlength: 80 }, // By Team only: Player 2 (fullName + contactNumber = Player 1, the captain)
   registrationTimestamp: { type: Date, default: Date.now },
 });
 const Registration = mongoose.model('Registration', registrationSchema);
@@ -105,6 +110,7 @@ const Registration = mongoose.model('Registration', registrationSchema);
 const settingSchema = new mongoose.Schema({
   key: { type: String, default: 'main', unique: true },
   maxPlayers: { type: Number, default: DEFAULT_MAX_PLAYERS, min: 1 },
+  maxTeams: { type: Number, default: DEFAULT_MAX_TEAMS, min: 1 },
 });
 const Setting = mongoose.model('Setting', settingSchema);
 
@@ -112,6 +118,7 @@ const Setting = mongoose.model('Setting', settingSchema);
 const eventSchema = new mongoose.Schema({
   key: { type: String, default: 'main', unique: true },
   title: { type: String, default: 'Pickleball Open Play' },
+  mode: { type: String, enum: MODES, default: 'open' },   // which registration is active
   level: { type: String, default: '' },
   tagline: { type: String, default: '' },
   startsAt: { type: Date, default: null },
@@ -136,15 +143,23 @@ const getEvent = () =>
   EventInfo.findOneAndUpdate({ key: 'main' }, { $setOnInsert: { key: 'main' } },
     { upsert: true, new: true, setDefaultsOnInsert: true });
 
+// Only the registrations of the active mode are used. The other list is hidden, never deleted.
+const kindFilter = (mode) => (mode === 'team' ? { kind: 'team' } : { kind: { $ne: 'team' } });
+
 // The slot summary used by both the public page and the admin page
+// In By Team mode, one slot = one team and "max" = max teams.
 async function getSlots() {
-  const settings = await getSettings();
-  const occupied = await Registration.countDocuments({ status: { $in: OCCUPYING } });
+  const [settings, event] = await Promise.all([getSettings(), getEvent()]);
+  const mode = event.mode === 'team' ? 'team' : 'open';
+  const max = mode === 'team' ? (settings.maxTeams || DEFAULT_MAX_TEAMS) : settings.maxPlayers;
+  const occupied = await Registration.countDocuments({ status: { $in: OCCUPYING }, ...kindFilter(mode) });
   return {
-    maxPlayers: settings.maxPlayers,
+    mode,
+    max,
+    maxPlayers: max,   // kept with this name so the older front-end code still works
     occupied,
-    availableSlots: Math.max(settings.maxPlayers - occupied, 0),
-    isFull: occupied >= settings.maxPlayers,
+    availableSlots: Math.max(max - occupied, 0),
+    isFull: occupied >= max,
   };
 }
 
@@ -170,12 +185,15 @@ app.get('/api/event', async (req, res, next) => {
 // Public player list: only players who agreed, first name + last initial only
 app.get('/api/players', async (req, res, next) => {
   try {
+    const event = await getEvent();
+    const mode = event.mode === 'team' ? 'team' : 'open';
     const players = await Registration
-      .find({ status: { $in: OCCUPYING }, showOnPublicList: true })
+      .find({ status: { $in: OCCUPYING }, showOnPublicList: true, ...kindFilter(mode) })
       .sort({ registrationTimestamp: 1 })
       .lean();
     res.json(players.map((p) => ({
-      displayName: publicName(p.fullName),
+      // By Team: only the team name is shown
+      displayName: mode === 'team' ? (p.teamName || publicName(p.fullName)) : publicName(p.fullName),
       playerTag: p.playerTag,
       paid: p.paid === true,
       // Paid = the admin checked it. Pending = a reference number was sent, waiting for the admin. Unpaid = nothing sent yet.
@@ -189,15 +207,29 @@ app.get('/api/players', async (req, res, next) => {
 async function createRegistration(req, res, next) {
   try {
     const b = req.body;
+    const event = await getEvent();
+    const isTeam = event.mode === 'team';   // the active mode decides, not the browser
+    const kind = isTeam ? 'team' : 'player';
+    const teamName = String(b.teamName || '').trim();
+    const partnerName = String(b.partnerName || '').trim();
+
     if (!b.fullName || !String(b.fullName).trim() || !b.contactNumber || !String(b.contactNumber).trim()) {
       return res.status(400).json({
         message: 'Please fix the highlighted fields.',
-        details: ['Full name and contact number are required.'],
+        details: [isTeam ? 'Player 1 name and contact number are required.' : 'Full name and contact number are required.'],
       });
+    }
+    if (isTeam) {
+      const problems = [];
+      if (!teamName) problems.push('Team name is required.');
+      if (teamName.length > 40) problems.push('Team name is too long (40 characters max).');
+      if (!partnerName) problems.push('Player 2 name is required.');
+      if (problems.length) {
+        return res.status(400).json({ message: 'Please fix the highlighted fields.', details: problems });
+      }
     }
 
     // Registration closes when the event starts (the countdown on the page reaches zero)
-    const event = await getEvent();
     if (event.startsAt && Date.now() >= new Date(event.startsAt).getTime()) {
       return res.status(403).json({ message: 'Registration is closed. The event has already started.' });
     }
@@ -205,9 +237,21 @@ async function createRegistration(req, res, next) {
     const duplicate = await Registration.findOne({
       contactNumber: String(b.contactNumber).trim(),
       status: { $ne: 'cancelled' },
+      ...kindFilter(event.mode),
     });
     if (duplicate) {
-      return res.status(409).json({ message: 'This contact number is already registered.' });
+      return res.status(409).json({ message: isTeam ? 'This contact number already has a team.' : 'This contact number is already registered.' });
+    }
+    if (isTeam) {
+      const escaped = teamName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nameUsed = await Registration.findOne({
+        kind: 'team',
+        status: { $ne: 'cancelled' },
+        teamName: new RegExp(`^${escaped}$`, 'i'),
+      });
+      if (nameUsed) {
+        return res.status(409).json({ message: 'That team name is already taken. Please choose another one.' });
+      }
     }
 
     // When GCash is set up (number or QR), new players wait for payment.
@@ -244,13 +288,16 @@ async function createRegistration(req, res, next) {
       playerTag: TAGS.includes(b.playerTag) ? b.playerTag : 'Bagong Manlalaro',
       showOnPublicList: Boolean(b.showOnPublicList ?? b.consent ?? b.publicConsent),
       paymentRef: paymentRequired ? paymentRef : '',
+      kind,
+      teamName: isTeam ? teamName : '',
+      partnerName: isTeam ? partnerName : '',
       status,
     });
 
     res.status(201).json({
       message: status === 'pending'
-        ? 'Your slot is reserved. It will be confirmed after your payment is checked.'
-        : 'Your slot is reserved!',
+        ? (isTeam ? 'Your team slot is reserved. It will be confirmed after your payment is checked.' : 'Your slot is reserved. It will be confirmed after your payment is checked.')
+        : (isTeam ? 'Your team slot is reserved!' : 'Your slot is reserved!'),
       status,
       registration,
       slots: await getSlots(),
@@ -282,9 +329,11 @@ app.post('/api/payment-ref', refLimiter, async (req, res, next) => {
     // 09171234567, +639171234567 and 639171234567 are the same number: try all three
     const last10 = contactNumber.replace(/\D/g, '').slice(-10);
     const numberFormats = [contactNumber, `0${last10}`, `+63${last10}`, `63${last10}`];
+    const event = await getEvent();
     const registration = await Registration.findOne({
       contactNumber: { $in: numberFormats },
       status: { $ne: 'cancelled' },
+      ...kindFilter(event.mode),
     });
     if (!registration) {
       return res.status(404).json({ message: 'We could not find that number. Check that it is the same number you registered with, or message the organizer with your GCash receipt.' });
@@ -316,7 +365,9 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
 
-    const filter = {};
+    const event = await getEvent();
+    const mode = event.mode === 'team' ? 'team' : 'open';
+    const filter = { ...kindFilter(mode) };   // only the active mode's list is shown
     if (STATUSES.includes(req.query.status)) filter.status = req.query.status;
     if (TAGS.includes(req.query.playerTag)) filter.playerTag = req.query.playerTag;
     if (req.query.paid === 'true') filter.paid = true;
@@ -326,7 +377,7 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
     const q = String(req.query.q || '').trim().slice(0, 60);
     if (q) {
       const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');   // the text is searched as plain text, never as a pattern
-      const or = ['fullName', 'contactNumber', 'email', 'province', 'municipalityOrCity', 'barangay', 'playerTag', 'paymentRef']
+      const or = ['fullName', 'contactNumber', 'email', 'province', 'municipalityOrCity', 'barangay', 'playerTag', 'paymentRef', 'teamName', 'partnerName']
         .map((f) => ({ [f]: rx }));
       const digits = q.replace(/\D/g, '');
       if (digits.length >= 4) {                       // 0917... / +63917... / 63917... all match the same number
@@ -342,10 +393,14 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
-      Registration.countDocuments({ status: { $in: OCCUPYING } }),
-      Registration.countDocuments({ status: { $in: OCCUPYING }, paid: true }),
+      Registration.countDocuments({ status: { $in: OCCUPYING }, ...kindFilter(mode) }),
+      Registration.countDocuments({ status: { $in: OCCUPYING }, paid: true, ...kindFilter(mode) }),
     ]);
+    // How many registrations are hidden because they belong to the other mode (for the switch warning)
+    const hiddenCount = await Registration.countDocuments({ status: { $in: OCCUPYING }, ...kindFilter(mode === 'team' ? 'open' : 'team') });
     res.json({
+      mode,
+      hiddenCount,
       total,
       page,
       limit,
@@ -403,16 +458,17 @@ app.delete('/api/admin/registrants/:id', requireAdmin, async (req, res, next) =>
 // Change max players -> slot summary + message
 app.patch('/api/settings/max-players', requireAdmin, async (req, res, next) => {
   try {
-    const value = Number(req.body.maxPlayers);
+    const forTeams = req.body.maxTeams !== undefined;   // By Team sends maxTeams, Open Play sends maxPlayers
+    const value = Number(forTeams ? req.body.maxTeams : req.body.maxPlayers);
     if (!Number.isInteger(value) || value < 1 || value > 200) {
-      return res.status(400).json({ message: 'Max players must be a whole number from 1 to 200.' });
+      return res.status(400).json({ message: `${forTeams ? 'Max teams' : 'Max players'} must be a whole number from 1 to 200.` });
     }
     await Setting.findOneAndUpdate(
       { key: 'main' },
-      { $set: { maxPlayers: value } },
+      { $set: forTeams ? { maxTeams: value } : { maxPlayers: value } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
-    res.json({ ...(await getSlots()), message: 'Max players updated.' });
+    res.json({ ...(await getSlots()), message: forTeams ? 'Max teams updated.' : 'Max players updated.' });
   } catch (err) { next(err); }
 });
 
@@ -431,6 +487,10 @@ app.patch('/api/admin/event', requireAdmin, async (req, res, next) => {
       if (b[f] !== undefined) update[f] = String(b[f]).trim();
     });
     if (b.fee !== undefined) update.fee = String(b.fee).trim();
+    if (b.mode !== undefined) {
+      if (MODES.includes(b.mode)) update.mode = b.mode;
+      else problems.push('Registration type must be Open Play or By Team.');
+    }
     if (b.notes !== undefined) {
       update.notes = Array.isArray(b.notes)
         ? b.notes.map((n) => String(n).trim()).filter(Boolean)
