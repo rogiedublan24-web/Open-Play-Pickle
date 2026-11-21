@@ -224,6 +224,9 @@ async function createRegistration(req, res, next) {
       if (!teamName) problems.push('Team name is required.');
       if (teamName.length > 40) problems.push('Team name is too long (40 characters max).');
       if (!partnerName) problems.push('Player 2 name is required.');
+      if (!String(b.municipalityOrCity || '').trim() || !String(b.barangay || '').trim()) {
+        problems.push('Municipality / City and barangay are required.');
+      }
       if (problems.length) {
         return res.status(400).json({ message: 'Please fix the highlighted fields.', details: problems });
       }

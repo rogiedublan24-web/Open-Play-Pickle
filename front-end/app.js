@@ -352,7 +352,7 @@ function tickCountdown() {
     box.hidden = false;
     box.classList.remove('live');
     units.hidden = false;
-    label.textContent = 'Starts in';
+    label.textContent = 'Registration closes in';
     Object.entries(parts).forEach(([name, value]) => {
       const el = units.querySelector(`[data-unit="${name}"]`);
       if (el) el.textContent = String(value).padStart(2, '0');
@@ -360,15 +360,11 @@ function tickCountdown() {
     return;
   }
 
-  const endsAt = countdownEnd ?? countdownStart + NO_END_VISIBLE_MS;
-  if (now < endsAt) {
-    box.hidden = false;
-    box.classList.add('live');
-    units.hidden = true;
-    label.textContent = 'Happening now';
-  } else {
-    box.hidden = true;     // the event is over
-  }
+   // The countdown reached zero: registration is closed
+  box.hidden = false;
+  box.classList.add('live');
+  units.hidden = true;
+  label.textContent = 'Registration closed';
 }
 
 /* =====================================================================
@@ -568,7 +564,7 @@ syncTagColor();
 
 // Province and city start filled in (Southern Leyte / Maasin City).
 // Tapping a box selects the text, so typing something else replaces it right away.
-['f-province', 'f-municipalityOrCity'].forEach((id) => {
+['f-province', 'f-municipalityOrCity', 'tf-municipalityOrCity'].forEach((id) => {
   $(id).addEventListener('focus', (e) => setTimeout(() => e.target.select(), 0));
 });
 
@@ -678,7 +674,8 @@ function validateTeam(v) {
   check('teamName', v.teamName.length < 2, 'Please enter your team name (at least 2 characters).');
   check('fullName', v.fullName.length < 2, 'Please enter the captain\'s full name.');
   check('contactNumber', !PH_MOBILE.test(v.contactNumber), 'Enter a valid PH mobile number, e.g. 0917 123 4567.');
-  check('partnerName', v.partnerName.length < 2, 'Please enter Player 2\'s name.');
+  check('municipalityOrCity', !v.municipalityOrCity, 'Please enter your municipality or city.');
+  check('barangay', !v.barangay, 'Please enter your barangay.');
   check('consent', !v.consent, 'Your consent is required to show the team name on the list.');
   return ok;
 }
@@ -700,6 +697,8 @@ teamForm.addEventListener('submit', async (e) => {
     fullName: teamForm.fullName.value.trim(),
     contactNumber: teamForm.contactNumber.value.replace(/[\s-]/g, ''),
     partnerName: teamForm.partnerName.value.trim(),
+    municipalityOrCity: teamForm.municipalityOrCity.value.trim(),
+    barangay: teamForm.barangay.value.trim(),
     consent: teamForm.consent.checked,
   };
   if (!validateTeam(values)) {

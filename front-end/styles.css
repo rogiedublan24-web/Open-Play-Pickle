@@ -1519,3 +1519,11 @@ table.data { min-width: 1240px; }
       rgba(29, 122, 75, .35) 100%),
     url("barangayhall.png") center / cover no-repeat;
 }
+
+/* ---------- BY TEAM MODE ---------- */
+#reg-table[data-mode="team"] .col-tag { display: none; }
+#tag-field[hidden] { display: none; }
+.team-hint { margin: 0 0 10px; line-height: 1.45; }
+#team-form[hidden], #reg-form[hidden] { display: none; }
+#mode-select { min-width: 250px; }
+.toolbar .field:has(#mode-select) { flex: 0 1 280px; }

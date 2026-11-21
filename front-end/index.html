@@ -24,7 +24,7 @@
 
   <header class="hero">
     <div class="container">
-      <p class="eyebrow">Open Play</p>
+      <p class="eyebrow">Let's ready</p>
       <h1 id="event-title">Pickleball Open Play</h1>
       <p class="hero-sub" id="event-tagline">No partner needed. Show up, sign up, and play.</p>
 
@@ -82,7 +82,7 @@
         <!-- Players who already registered send their reference number here after paying -->
         <form class="ref-form" id="ref-form" novalidate>
           <h3>Already paid? Send your reference number</h3>
-          <p class="ref-warning" role="note"><span class="ref-warning-icon" aria-hidden="true">!</span><span>Use the <strong>same contact number</strong> you registered with. If it does not work, message the organizer with your GCash receipt.</span></p>
+          <p class="ref-warning" role="note"><span class="ref-warning-icon" aria-hidden="true"></span><span>Use the <strong>same contact number</strong> you registered with. If it does not work, message the organizer with your GCash receipt.</span></p>
           <div class="grid-2">
             <div class="field">
               <label for="r-contact">Contact number</label>
@@ -119,14 +119,14 @@
         </div>
         <p class="muted" id="slot-left">&nbsp;</p>
 
-        <ol class="slot-grid" id="slot-grid" aria-label="Player slots"></ol>
-
-        <!-- What the Unpaid / Pending / Paid labels mean (shown only when GCash payment is set up) -->
+         <!-- What the Unpaid / Pending / Paid labels mean (shown only when GCash payment is set up) -->
         <ul class="pay-legend" id="pay-legend" hidden>
           <li><span class="slot-pay unpaid">Unpaid</span><span>Registered, no payment sent yet.</span></li>
           <li><span class="slot-pay pending">Pending</span><span>Reference number sent, waiting for the organizer to check it.</span></li>
           <li><span class="slot-pay paid">Paid</span><span>Payment confirmed by the organizer.</span></li>
         </ul>
+
+        <ol class="slot-grid" id="slot-grid" aria-label="Player slots"></ol>
 
         <p class="muted small" id="sync-note" role="status"></p>
       </section>
@@ -227,6 +227,21 @@
             <input id="tf-partnerName" name="partnerName" type="text" required maxlength="80" autocomplete="off">
             <p class="error" id="terr-partnerName" role="alert"></p>
           </div>
+                    <fieldset class="group">
+            <legend>Where is your team from?</legend>
+
+            <div class="field">
+              <label for="tf-municipalityOrCity">Municipality / City</label>
+              <input id="tf-municipalityOrCity" name="municipalityOrCity" type="text" autocomplete="address-level2" value="Maasin City" required maxlength="60">
+              <p class="error" id="terr-municipalityOrCity" role="alert"></p>
+            </div>
+
+            <div class="field">
+              <label for="tf-barangay">Barangay</label>
+              <input id="tf-barangay" name="barangay" type="text" required maxlength="60">
+              <p class="error" id="terr-barangay" role="alert"></p>
+            </div>
+          </fieldset>
 
           <p class="muted small team-hint">One payment per team. When you send your GCash reference later, use the captain's contact number.</p>
 
@@ -246,7 +261,7 @@
 
   <footer class="footer">
     <div class="container">
-       <a href="admin.html" id="admin-link" class="muted small">Admin</a>
+       
       <p class="muted small">Pickleball Open Play · All skill levels welcome.</p>
     </div>
   </footer>
