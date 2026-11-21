@@ -1572,3 +1572,11 @@ table.data { min-width: 1240px; }
   .admin-tabs .tab { padding: 0 9px; font-size: .84rem; }
   .admin-tabs .tab-signout { padding: 0 10px; }
 }
+
+html{scroll-behavior:smooth}
+body{animation:pageIn .5s ease both}
+@keyframes pageIn{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  body{animation:none}
+  html{scroll-behavior:auto}
+}
