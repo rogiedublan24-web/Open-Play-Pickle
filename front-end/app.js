@@ -291,6 +291,7 @@ function renderEvent(ev) {
   };
 
   updateCountdownTimes(start, end);
+  document.documentElement.classList.add('event-ready');   // the real title is in place: show it
 }
 
 /* =====================================================================
@@ -525,7 +526,10 @@ async function refresh() {
       // the slots still work even if the event details fail to load, but we show why
       api.getEvent().catch((err) => { eventProblem = err.message; return null; }),
     ]);
-    if (event) renderEvent(event);
+    if (event) {
+      renderEvent(event);
+      saveEventCache(event);
+    }
     renderSlots(slots, players);
     $('sync-note').textContent =
       `Last updated: ${new Date().toLocaleTimeString(LOCALE, { timeZone: TIMEZONE })}` +
@@ -805,4 +809,21 @@ updateBottomNav();
 /* =====================================================================
    7. START
    ===================================================================== */
+// The last event details are kept in the browser. The page shows them right away, then the fresh
+// details from the server replace them. This way the title and countdown do not "jump" when the page opens.
+const EVENT_CACHE_KEY = 'pickleball-event-cache';
+
+function saveEventCache(event) {
+  try { localStorage.setItem(EVENT_CACHE_KEY, JSON.stringify(event)); } catch { /* storage blocked or full */ }
+}
+
+function showCachedEvent() {
+  try {
+    const raw = localStorage.getItem(EVENT_CACHE_KEY);
+    if (raw) renderEvent(JSON.parse(raw));
+  } catch { /* no cache yet */ }
+}
+
+showCachedEvent();
+setTimeout(() => document.documentElement.classList.add('event-ready'), 2500);   // never keep the title hidden if the server is slow
 refresh().then(schedulePoll);

@@ -1580,3 +1580,7 @@ body{animation:pageIn .5s ease both}
   body{animation:none}
   html{scroll-behavior:auto}
 }
+
+/* ---------- No flash of the default title (register page) ---------- */
+html:not(.event-ready) #event-title,
+html:not(.event-ready) #event-tagline { visibility: hidden; }

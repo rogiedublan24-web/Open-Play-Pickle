@@ -27,6 +27,12 @@ let currentMode = 'open';    // 'open' = Open Play, 'team' = By Team (the server
 let lastOccupied = 0;        // used in the switch warning
 let payFilter = '';          // the active payment chip: '' (all) | 'pending' | 'unpaid' | 'paid'
 
+// The event title that is set automatically when you switch the registration type
+const DEFAULT_TITLES = {
+  open: 'Open Play Event',
+  team: 'Pickleball Doubles Tournament',
+};
+
 /* =====================================================================
    2. API LAYER - same idea as the public page, plus the x-admin-key header
    ===================================================================== */
@@ -579,7 +585,7 @@ $('mode-btn').addEventListener('click', async () => {
   const sure = await showDialog({
     kind: 'danger',
     title: toTeam ? 'Switch to By Team?' : 'Switch to Open Play?',
-    message: `Switching to ${toTeam ? 'By Team' : 'Open Play'} will hide the ${hiding} ${hiding === 1 ? hidden.replace(/s$/, '') : hidden} now on the list. They are not deleted, and they come back when you switch again. The public page will show the ${toTeam ? 'team' : 'player'} form and list right away.`,
+    message: `Switching to ${toTeam ? 'By Team' : 'Open Play'} will hide the ${hiding} ${hiding === 1 ? hidden.replace(/s$/, '') : hidden} now on the list. They are not deleted, and they come back when you switch again. The public page will show the ${toTeam ? 'team' : 'player'} form and list right away. The event title will change to "${DEFAULT_TITLES[target]}" (you can edit it in the Event tab).`,
     confirmText: 'Yes, switch',
     cancelText: 'Cancel',
   });
@@ -588,7 +594,8 @@ $('mode-btn').addEventListener('click', async () => {
   const btn = $('mode-btn');
   btn.disabled = true;
   try {
-    await api.updateEvent({ mode: target });
+    const result = await api.updateEvent({ mode: target, title: DEFAULT_TITLES[target] });
+    if (result?.event) fillEventForm(result.event);   // the Event tab shows the new title too
     page = 1;
     $('filter-search').value = '';
     $('filter-status').value = '';
