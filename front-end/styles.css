@@ -1527,3 +1527,48 @@ table.data { min-width: 1240px; }
 #team-form[hidden], #reg-form[hidden] { display: none; }
 #mode-select { min-width: 250px; }
 .toolbar .field:has(#mode-select) { flex: 0 1 280px; }
+
+
+/* ---------- ADMIN TABS, FILTER CHIPS, MARK PAID ---------- */
+.admin-tabs {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-bottom: 18px; padding: 8px;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius-sm, 14px);
+  box-shadow: 0 1px 0 #fff inset, 0 4px 0 var(--line);
+  position: sticky; top: 8px; z-index: 20;
+}
+.admin-tabs .tab {
+  font: inherit; font-weight: 750; font-size: .92rem; min-height: 42px; padding: 0 16px;
+  border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.admin-tabs .tab:hover { background: var(--surface-soft, #eef3ec); color: var(--text); }
+.admin-tabs .tab.active { background: var(--accent, #d5f33c); color: #1a2800; box-shadow: 0 3px 0 #97ae14; }
+.admin-tabs .tab-signout { margin-left: auto; }
+.tab-panel[hidden] { display: none; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
+.chip {
+  font: inherit; font-weight: 700; font-size: .88rem; min-height: 38px; padding: 0 14px;
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1.5px solid var(--line); border-radius: 999px; background: #fff; color: var(--text); cursor: pointer;
+}
+.chip .count {
+  min-width: 24px; padding: 1px 7px; border-radius: 999px; text-align: center;
+  background: var(--surface-soft, #eef3ec); font-variant-numeric: tabular-nums; font-size: .8rem;
+}
+.chip:hover { border-color: var(--brand); }
+.chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.chip.active .count { background: rgba(255, 255, 255, .22); color: #fff; }
+.chip-pending.alert:not(.active) { border-color: #3b82c4; background: #e8f1fb; }
+.chip-pending.alert:not(.active) .count { background: #3b82c4; color: #fff; }
+
+.btn-paid { background: #2f9e5f; color: #fff; border: 0; box-shadow: 0 3px 0 #1f7443; }
+.btn-paid:hover { filter: brightness(1.06); }
+.btn-paid:disabled { opacity: .6; }
+.actions { flex-wrap: nowrap; }
+.actions .btn { white-space: nowrap; }
+@media (max-width: 520px) {
+  .admin-tabs { gap: 4px; padding: 6px; }
+  .admin-tabs .tab { padding: 0 9px; font-size: .84rem; }
+  .admin-tabs .tab-signout { padding: 0 10px; }
+}

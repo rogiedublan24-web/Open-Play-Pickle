@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Admin</title>
+  <title>Open Play Admin</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
   <header class="hero hero-sm">
     <div class="container">
-      <p class="eyebrow">Sign in</p>
-      <h1>Admin Side</h1>
+      <p class="eyebrow">Admin</p>
+      <h1>Open Play Admin</h1>
     </div>
   </header>
 
@@ -34,27 +34,16 @@
     <!-- ADMIN PANEL (hidden until the key is accepted) -->
     <div class="admin-panel" id="admin-panel" hidden>
 
-      <section class="card" aria-labelledby="mode-heading">
-        <h2 id="mode-heading">Registration type</h2>
-        <p class="muted small">Only one type is active at a time. The public page shows the matching form and list. The other list is hidden, not deleted.</p>
-        <div class="toolbar">
-          <div class="field small-field">
-            <label for="mode-select">Active registration</label>
-            <select id="mode-select">
-              <option value="open">Open Play (single players)</option>
-              <option value="team">By Team (2 players per team)</option>
-            </select>
-          </div>
-          <button class="btn btn-primary btn-sm" id="mode-btn" type="button">Switch</button>
-        </div>
-        <p class="form-msg" id="mode-msg" role="status" aria-live="polite"></p>
-      </section>
+      <nav class="admin-tabs" role="tablist" aria-label="Admin sections">
+        <button type="button" class="tab active" role="tab" data-tab="registrations" aria-selected="true">Registrations</button>
+        <button type="button" class="tab" role="tab" data-tab="event" aria-selected="false">Event</button>
+        <button type="button" class="tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+        <button class="btn btn-secondary btn-sm tab-signout" id="logout-btn" type="button">Sign out</button>
+      </nav>
 
+      <div class="tab-panel" id="tab-registrations" role="tabpanel">
       <section class="card" aria-labelledby="slots-heading">
-        <div class="card-head">
-          <h2 id="slots-heading">Slots</h2>
-          <button class="btn btn-secondary btn-sm" id="logout-btn" type="button">Sign out</button>
-        </div>
+        <h2 id="slots-heading">Slots</h2>
 
         <div class="stats">
           <div class="stat"><b id="sum-occupied">–</b><span id="lbl-occupied">Players</span></div>
@@ -63,16 +52,75 @@
           <div class="stat"><b id="sum-paid">–</b><span>Paid</span></div>
           <div class="stat"><b id="sum-unpaid">–</b><span>Unpaid</span></div>
         </div>
-
-        <form id="max-form" class="toolbar" novalidate>
-          <div class="field small-field">
-            <label for="max-input" id="max-label">Change maximum players</label>
-            <input id="max-input" type="number" min="1" max="200" step="1" inputmode="numeric">
-          </div>
-          <button class="btn btn-primary btn-sm" id="max-btn" type="submit">Save maximum</button>
-        </form>
       </section>
 
+      <section class="card" aria-labelledby="reg-heading">
+        <h2 id="reg-heading">Registrations</h2>
+
+        <div class="chips" id="pay-chips" role="group" aria-label="Filter by payment">
+          <button type="button" class="chip active" data-pay="">All <span class="count" id="chip-all">0</span></button>
+          <button type="button" class="chip chip-pending" data-pay="pending">Pending <span class="count" id="chip-pending">0</span></button>
+          <button type="button" class="chip" data-pay="unpaid">Unpaid <span class="count" id="chip-unpaid">0</span></button>
+          <button type="button" class="chip" data-pay="paid">Paid <span class="count" id="chip-paid">0</span></button>
+        </div>
+
+        <div class="toolbar">
+          <div class="field search-field">
+            <label for="filter-search">Search player</label>
+            <input id="filter-search" type="search"  placeholder="Name, team, number, barangay, reference..." maxlength="60" autocomplete="off">
+          </div>
+          <div class="field small-field">
+            <label for="filter-status">Status</label>
+            <select id="filter-status">
+              <option value="">All</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="field small-field" id="tag-field">
+            <label for="filter-tag">Player tag</label>
+            <select id="filter-tag">
+              <option value="">All</option>
+              <option value="Bagong Manlalaro">Bagong Manlalaro</option>
+              <option value="Regular">Regular</option>
+              <option value="Bisita">Bisita</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="refresh-btn" type="button">Refresh</button>
+          <button class="btn btn-secondary btn-sm" id="export-btn" type="button">Export CSV</button>
+        </div>
+
+        <p class="form-msg" id="admin-msg" role="status" aria-live="polite"></p>
+
+        <div class="table-wrap">
+          <table class="data" id="reg-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th id="th-player">Player</th>
+                <th>Contact</th>
+                <th class="col-addr">Address</th>
+                <th>Registered</th>
+                <th class="col-tag">Tag</th>
+                <th>Status</th>
+                <th>Payment</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="reg-body"></tbody>
+          </table>
+        </div>
+
+        <div class="pager">
+          <button class="btn btn-secondary btn-sm" id="prev-btn" type="button">Previous</button>
+          <span class="muted small" id="page-info">–</span>
+          <button class="btn btn-secondary btn-sm" id="next-btn" type="button">Next</button>
+        </div>
+      </section>
+      </div>
+
+      <div class="tab-panel" id="tab-event" role="tabpanel" hidden>
       <section class="card" aria-labelledby="event-heading">
         <h2 id="event-heading">Event details</h2>
         <p class="muted small">These are shown on the public page. Date and time use Philippine time.</p>
@@ -150,72 +198,38 @@
           <p class="form-msg" id="event-msg" role="status" aria-live="polite"></p>
         </form>
       </section>
+      </div>
 
-      <section class="card" aria-labelledby="reg-heading">
-        <h2 id="reg-heading">Registrations</h2>
-
+      <div class="tab-panel" id="tab-settings" role="tabpanel" hidden>
+      <section class="card" aria-labelledby="mode-heading">
+        <h2 id="mode-heading">Registration type</h2>
+        <p class="muted small">Only one type is active at a time. The public page shows the matching form and list. The other list is hidden, not deleted.</p>
         <div class="toolbar">
-          <div class="field search-field">
-            <label for="filter-search">Search player</label>
-            <input id="filter-search" type="search" placeholder="Name, team, number, barangay, reference..." maxlength="60" autocomplete="off">
-          </div>
           <div class="field small-field">
-            <label for="filter-status">Status</label>
-            <select id="filter-status">
-              <option value="">All</option>
-              <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="cancelled">Cancelled</option>
+            <label for="mode-select">Active registration</label>
+            <select id="mode-select">
+              <option value="open">Open Play (single players)</option>
+              <option value="team">By Team (2 players per team)</option>
             </select>
           </div>
-          <div class="field small-field" id="tag-field">
-            <label for="filter-tag">Player tag</label>
-            <select id="filter-tag">
-              <option value="">All</option>
-              <option value="Bagong Manlalaro">Bagong Manlalaro</option>
-              <option value="Regular">Regular</option>
-              <option value="Bisita">Bisita</option>
-            </select>
-          </div>
-          <div class="field small-field">
-            <label for="filter-paid">Payment</label>
-            <select id="filter-paid">
-              <option value="">All</option>
-              <option value="true">Paid</option>
-              <option value="false">Unpaid</option>
-            </select>
-          </div>
-          <button class="btn btn-secondary btn-sm" id="refresh-btn" type="button">Refresh</button>
-          <button class="btn btn-secondary btn-sm" id="export-btn" type="button">Export CSV</button>
+          <button class="btn btn-primary btn-sm" id="mode-btn" type="button">Switch</button>
         </div>
-
-        <p class="form-msg" id="admin-msg" role="status" aria-live="polite"></p>
-
-        <div class="table-wrap">
-          <table class="data" id="reg-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th id="th-player">Player</th>
-                <th>Contact</th>
-                <th class="col-addr">Address</th>
-                <th>Registered</th>
-                <th class="col-tag">Tag</th>
-                <th>Status</th>
-                <th>Payment</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="reg-body"></tbody>
-          </table>
-        </div>
-
-        <div class="pager">
-          <button class="btn btn-secondary btn-sm" id="prev-btn" type="button">Previous</button>
-          <span class="muted small" id="page-info">–</span>
-          <button class="btn btn-secondary btn-sm" id="next-btn" type="button">Next</button>
-        </div>
+        <p class="form-msg" id="mode-msg" role="status" aria-live="polite"></p>
       </section>
+
+      <section class="card" aria-labelledby="max-heading">
+        <h2 id="max-heading">Maximum slots</h2>
+        <p class="muted small">How many players (Open Play) or teams (By Team) can register.</p>
+
+        <form id="max-form" class="toolbar" novalidate>
+          <div class="field small-field">
+            <label for="max-input" id="max-label">Change maximum players</label>
+            <input id="max-input" type="number" min="1" max="200" step="1" inputmode="numeric">
+          </div>
+          <button class="btn btn-primary btn-sm" id="max-btn" type="submit">Save maximum</button>
+        </form>
+      </section>
+      </div>
 
     </div>
   </main>

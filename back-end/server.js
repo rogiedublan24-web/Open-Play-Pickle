@@ -376,6 +376,16 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
     if (req.query.paid === 'true') filter.paid = true;
     if (req.query.paid === 'false') filter.paid = { $ne: true };   // also matches older records without the field
 
+    
+    // Payment chips of the admin page: paid / pending (reference sent, waiting for the admin) / unpaid (nothing sent)
+    const noRef = { $in: ['', null] };   // an empty reference, or older records without the field
+    if (req.query.payment === 'paid') filter.paid = true;
+    if (req.query.payment === 'pending' || req.query.payment === 'unpaid') {
+      filter.paid = { $ne: true };
+      filter.paymentRef = req.query.payment === 'pending' ? { $nin: ['', null] } : noRef;
+      if (!filter.status) filter.status = { $in: OCCUPYING };   // cancelled ones are not counted
+    }
+
     // Search box: matches name, number, email, address, tag or reference. Capital or small letters both work.
     const q = String(req.query.q || '').trim().slice(0, 60);
     if (q) {
@@ -389,7 +399,7 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
       filter.$or = or;
     }
 
-    const [total, registrations, occupying, paidOccupying] = await Promise.all([
+      const [total, registrations, occupying, paidOccupying, pendingOccupying] = await Promise.all([
       Registration.countDocuments(filter),
       Registration.find(filter)
         .sort({ registrationTimestamp: 1 })
@@ -398,12 +408,20 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
         .lean(),
       Registration.countDocuments({ status: { $in: OCCUPYING }, ...kindFilter(mode) }),
       Registration.countDocuments({ status: { $in: OCCUPYING }, paid: true, ...kindFilter(mode) }),
+      Registration.countDocuments({ status: { $in: OCCUPYING }, paid: { $ne: true }, paymentRef: { $nin: ['', null] }, ...kindFilter(mode) }),
     ]);
     // How many registrations are hidden because they belong to the other mode (for the switch warning)
     const hiddenCount = await Registration.countDocuments({ status: { $in: OCCUPYING }, ...kindFilter(mode === 'team' ? 'open' : 'team') });
     res.json({
       mode,
       hiddenCount,
+      // numbers on the filter chips (only registrations that hold a slot)
+      counts: {
+        all: occupying,
+        pending: pendingOccupying,
+        unpaid: Math.max(occupying - paidOccupying - pendingOccupying, 0),
+        paid: paidOccupying,
+      },
       total,
       page,
       limit,

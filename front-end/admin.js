@@ -25,6 +25,7 @@ try { sessionStorage.removeItem(KEY_STORAGE); } catch { /* storage blocked */ }
 let page = 1;
 let currentMode = 'open';    // 'open' = Open Play, 'team' = By Team (the server decides)
 let lastOccupied = 0;        // used in the switch warning
+let payFilter = '';          // the active payment chip: '' (all) | 'pending' | 'unpaid' | 'paid'
 
 /* =====================================================================
    2. API LAYER - same idea as the public page, plus the x-admin-key header
@@ -166,6 +167,7 @@ function showPanel(open) {
 
 function logout(message) {
   adminKey = '';
+  showTab('registrations');
   $('admin-key').value = '';
   showPanel(false);
   const el = $('login-msg');
@@ -311,6 +313,7 @@ function buildRow(reg, number) {
     }
   });
 
+
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className = 'btn btn-danger btn-sm';
@@ -366,8 +369,25 @@ function buildRow(reg, number) {
   return tr;
 }
 
-function renderTable({ total, registrations, paidCount, unpaidCount, mode }) {
+function renderChipCounts(counts) {
+  if (!counts) return;
+  ['all', 'pending', 'unpaid', 'paid'].forEach((k) => { $(`chip-${k}`).textContent = counts[k] ?? 0; });
+  // Pending = reference numbers waiting for you: the chip stands out when there is something to check
+  document.querySelector('.chip-pending').classList.toggle('alert', (counts.pending || 0) > 0);
+}
+
+function setPayFilter(value) {
+  payFilter = value;
+  document.querySelectorAll('#pay-chips .chip').forEach((chip) => {
+    const on = chip.dataset.pay === value;
+    chip.classList.toggle('active', on);
+    chip.setAttribute('aria-pressed', String(on));
+  });
+}
+
+function renderTable({ total, registrations, paidCount, unpaidCount, mode, counts }) {
   if (mode) applyMode(mode);
+  renderChipCounts(counts);
   const body = $('reg-body');
   body.replaceChildren();
 
@@ -398,7 +418,7 @@ function currentFilters() {
   const params = {};
   if ($('filter-status').value) params.status = $('filter-status').value;
   if ($('filter-tag').value) params.playerTag = $('filter-tag').value;
-  if ($('filter-paid').value) params.paid = $('filter-paid').value;
+  if (payFilter) params.payment = payFilter;
   const search = $('filter-search').value.trim();
   if (search) params.q = search;
   return params;
@@ -433,7 +453,9 @@ $('filter-search').addEventListener('keydown', (e) => {
 
 $('filter-status').addEventListener('change', reloadFromFirstPage);
 $('filter-tag').addEventListener('change', reloadFromFirstPage);
-$('filter-paid').addEventListener('change', reloadFromFirstPage);
+document.querySelectorAll('#pay-chips .chip').forEach((chip) => {
+  chip.addEventListener('click', () => { setPayFilter(chip.dataset.pay); reloadFromFirstPage(); });
+});
 $('refresh-btn').addEventListener('click', () => {
   showMessage('', '');
   Promise.all([loadRegistrations(), loadSlots()]).catch(handleError);
@@ -571,7 +593,7 @@ $('mode-btn').addEventListener('click', async () => {
     $('filter-search').value = '';
     $('filter-status').value = '';
     $('filter-tag').value = '';
-    $('filter-paid').value = '';
+    setPayFilter('');
     await Promise.all([loadRegistrations(), loadSlots()]);
     showModeMessage(`Now using ${toTeam ? 'By Team' : 'Open Play'} registration.`, 'ok');
   } catch (err) {
@@ -580,6 +602,21 @@ $('mode-btn').addEventListener('click', async () => {
   } finally {
     btn.disabled = false;
   }
+});
+
+/* =====================================================================
+   6d. TABS - Registrations | Event | Settings
+   ===================================================================== */
+function showTab(name) {
+  document.querySelectorAll('.admin-tabs .tab').forEach((t) => {
+    const on = t.dataset.tab === name;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', String(on));
+  });
+  document.querySelectorAll('.tab-panel').forEach((p) => { p.hidden = p.id !== `tab-${name}`; });
+}
+document.querySelectorAll('.admin-tabs .tab').forEach((t) => {
+  t.addEventListener('click', () => showTab(t.dataset.tab));
 });
 
 /* =====================================================================
