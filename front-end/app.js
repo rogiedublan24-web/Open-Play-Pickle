@@ -827,3 +827,22 @@ function showCachedEvent() {
 showCachedEvent();
 setTimeout(() => document.documentElement.classList.add('event-ready'), 2500);   // never keep the title hidden if the server is slow
 refresh().then(schedulePoll);
+
+
+/* =====================================================================
+   AUTO-HIDE - green success messages disappear by themselves after 4 seconds.
+   Red error messages stay until the problem is fixed.
+   ===================================================================== */
+(function autoHideSuccessMessages() {
+  const HIDE_AFTER_MS = 8000;
+  const timers = new WeakMap();
+  document.querySelectorAll('.form-msg').forEach((el) => {
+    const check = () => {
+      clearTimeout(timers.get(el));
+      if (el.classList.contains('ok') && el.textContent.trim()) {
+        timers.set(el, setTimeout(() => { el.textContent = ''; el.className = 'form-msg'; }, HIDE_AFTER_MS));
+      }
+    };
+    new MutationObserver(check).observe(el, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  });
+})();
