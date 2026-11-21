@@ -25,8 +25,8 @@
     --card:#ffffff; --line:#e3e1d4;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-   html{scroll-behavior:smooth;background:var(--green-900)} 
-  body{min-height:100vh;font-family:'DM Sans',system-ui,sans-serif;background:var(--cream);color:var(--ink);line-height:1.6}
+   html{scroll-behavior:smooth;background:#0c3b2a}
+  body{font-family:'DM Sans',system-ui,sans-serif;background:var(--cream);color:var(--ink);line-height:1.6}
   h1,h2,h3{font-family:'Bricolage Grotesque','DM Sans',sans-serif;line-height:1.1;letter-spacing:-.02em}
   .wrap{max-width:960px;margin:0 auto;padding:0 20px}
 
@@ -108,18 +108,26 @@
 
   footer{text-align:center;color:var(--muted);font-size:.9rem;padding:30px 20px 44px}
 
-  /* Smooth fade papasok / palabas ng page */
-  body{animation:pageIn .5s ease both}
-  body.leaving{opacity:0;transition:opacity .35s ease}
-  @keyframes pageIn{from{opacity:0}to{opacity:1}}
-
   @media (prefers-reduced-motion:reduce){
     *{transition:none!important;scroll-behavior:auto!important}
-    body{animation:none}
     .slide{animation:none}
     .slide:nth-child(1){opacity:1}
   }
+
+  @view-transition{navigation:auto}
+
+  @keyframes textRise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+  @keyframes textOut{to{opacity:0;transform:translateY(-22px)}}
+  .hero .wrap>*{animation:textRise .7s cubic-bezier(.2,.7,.2,1) both}
+  .hero .wrap>:nth-child(2){animation-delay:.08s}
+  .hero .wrap>:nth-child(3){animation-delay:.16s}
+  html.leaving .hero .wrap>*{animation:textOut .35s ease forwards}
+  @media (prefers-reduced-motion:reduce){.hero .wrap>*{animation:none!important}}
+
+
 </style>
+  <link rel="prefetch" href="styles.css">
+<script type="speculationrules">{"prerender":[{"urls":["register.html"]}]}</script>
 </head>
 <body>
 
@@ -196,18 +204,18 @@
 </footer>
 
 <script>
-  // Fade out bago pumunta sa register page
+  
   document.querySelectorAll('a[href^="register.html"]').forEach(function (a) {
     a.addEventListener('click', function (e) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
       e.preventDefault();
-      document.body.classList.add('leaving');
-      setTimeout(function () { location.href = a.href; }, 350);
+      if (document.documentElement.classList.contains('leaving')) return;
+      document.documentElement.classList.add('leaving');
+      setTimeout(function () { location.href = a.href; }, 330);
     });
   });
-  // Kapag pinindot ang Back button, ibalik ang page na hindi naka-fade
   window.addEventListener('pageshow', function (e) {
-    if (e.persisted) document.body.classList.remove('leaving');
+    if (e.persisted) document.documentElement.classList.remove('leaving');
   });
 </script>
 </body>

@@ -17,7 +17,7 @@
 
   <!-- Tab icon -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%93%3C/text%3E%3C/svg%3E">
-
+  <style id="critical-bg">html{background:#0c3b2a}</style>
   <link rel="stylesheet" href="styles.css">
 
   <!-- Smooth fade-in pagdating galing sa landing page -->
@@ -29,6 +29,7 @@
       body{animation:none}
       html{scroll-behavior:auto}
     }
+    
   </style>
 </head>
 <body>
@@ -311,6 +312,7 @@
 
   <!-- Dahan-dahang pagbaba papunta sa Register form pagdating galing landing page -->
   <script>
+
     window.addEventListener('load', function () {
       if (location.hash !== '#register') return;
       window.scrollTo(0, 0);
@@ -319,6 +321,7 @@
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 400);
     });
+    
   </script>
 
 </body>

@@ -1581,6 +1581,18 @@ body{animation:pageIn .5s ease both}
   html{scroll-behavior:auto}
 }
 
-/* ---------- No flash of the default title (register page) ---------- */
-html:not(.event-ready) #event-title,
-html:not(.event-ready) #event-tagline { visibility: hidden; }
+html { background-color: #0c3b2a; }
+body { min-height: 100vh; }
+@view-transition { navigation: auto; }
+
+/* Text rises in once the event details are ready (event-ready is set by app.js) */
+@keyframes textRise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+.hero > .container:has(#event-title) { animation: none; }
+.hero .container:has(#event-title) > * { opacity: 0; }
+html.event-ready .hero .container:has(#event-title) > * { animation: textRise .7s cubic-bezier(.2, .7, .2, 1) both; }
+html.event-ready .hero .container:has(#event-title) > :nth-child(2) { animation-delay: .08s; }
+html.event-ready .hero .container:has(#event-title) > :nth-child(3) { animation-delay: .16s; }
+html.event-ready .hero .container:has(#event-title) > :nth-child(4) { animation-delay: .24s; }
+html.event-ready .hero .container:has(#event-title) > :nth-child(5) { animation-delay: .32s; }
+html.event-ready .hero .container:has(#event-title) > :nth-child(6) { animation-delay: .4s; }
+@media (prefers-reduced-motion: reduce) { .hero .container:has(#event-title) > * { opacity: 1; animation: none !important; } }
