@@ -399,7 +399,7 @@ function flashButton(button, text) {
 }
 
 $('share-btn').addEventListener('click', async () => {
-  const url = location.origin + location.pathname;
+  const url = location.origin + '/';
   if (navigator.share) {
     try {
       await navigator.share({ title: shareInfo.title, text: shareInfo.text, url });
