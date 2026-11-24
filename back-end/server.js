@@ -32,8 +32,18 @@ const STATUSES = ['pending', 'confirmed', 'cancelled'];
 const TAGS = ['Bagong Manlalaro', 'Regular', 'Bisita'];
 const OCCUPYING = ['pending', 'confirmed'];   // statuses that take up a slot
 const NEW_REGISTRATION_STATUS = 'confirmed';    // status given to new players when slots are free
-const MODES = ['open', 'team'];                 // 'open' = Open Play (single players), 'team' = By Team (2 players per team)
+const MODES = ['open', 'team', 'solo'];         // 'open' = Open Play (single players), 'team' = By Team (2 players per team), 'solo' = Solo (one player, boy or girl)
 const DEFAULT_MAX_TEAMS = numberFromEnv('DEFAULT_MAX_TEAMS', 8);
+
+// Categories of the By Team and Solo modes. The admin chooses which ones are open (any number of them). Must match the lists in the front-end.
+const CATEGORIES = [
+  { id: 'allboys', label: 'All Boys', mode: 'team' },
+  { id: 'allgirls', label: 'All Girls', mode: 'team' },
+  { id: 'mixed', label: 'Boy / Girl', mode: 'team' },
+  { id: 'soloboy', label: 'Solo Boy', mode: 'solo' },
+  { id: 'sologirl', label: 'Solo Girl', mode: 'solo' },
+];
+const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map((c) => [c.id, c]));
 
 const app = express();
 
@@ -99,9 +109,10 @@ const registrationSchema = new mongoose.Schema({
   showOnPublicList: { type: Boolean, default: false },
   paid: { type: Boolean, default: false },   // only the admin can change this
   paymentRef: { type: String, trim: true, default: '' },   // 13-digit GCash reference number
-  kind: { type: String, enum: ['player', 'team'], default: 'player' },   // older records have no kind = player
+  kind: { type: String, enum: ['player', 'team', 'solo'], default: 'player' },   // older records have no kind = player
   teamName: { type: String, trim: true, default: '', maxlength: 40 },    // By Team only
   partnerName: { type: String, trim: true, default: '', maxlength: 80 }, // By Team only: Player 2 (fullName + contactNumber = Player 1, the captain)
+  category: { type: String, trim: true, default: '' },                   // By Team / Solo only: allboys | allgirls | mixed | soloboy | sologirl
   registrationTimestamp: { type: Date, default: Date.now },
 });
 const Registration = mongoose.model('Registration', registrationSchema);
@@ -110,14 +121,16 @@ const Registration = mongoose.model('Registration', registrationSchema);
 const settingSchema = new mongoose.Schema({
   key: { type: String, default: 'main', unique: true },
   maxPlayers: { type: Number, default: DEFAULT_MAX_PLAYERS, min: 1 },
-  maxTeams: { type: Number, default: DEFAULT_MAX_TEAMS, min: 1 },
+  maxTeams: { type: Number, default: DEFAULT_MAX_TEAMS, min: 1 },   // default max for a category that has no max of its own
+  enabledCategories: { type: [String], default: undefined },        // not set yet = all categories are open
+  catMax: { type: mongoose.Schema.Types.Mixed, default: {} },       // { allboys: 8, ... } max per category
 });
 const Setting = mongoose.model('Setting', settingSchema);
 
 // One document with the event details shown on the public page
 const eventSchema = new mongoose.Schema({
   key: { type: String, default: 'main', unique: true },
-  title: { type: String, default: 'Pickleball Open Play' },
+  title: { type: String, default: 'Pickleball Event' },
   mode: { type: String, enum: MODES, default: 'open' },   // which registration is active
   level: { type: String, default: '' },
   tagline: { type: String, default: '' },
@@ -143,15 +156,55 @@ const getEvent = () =>
   EventInfo.findOneAndUpdate({ key: 'main' }, { $setOnInsert: { key: 'main' } },
     { upsert: true, new: true, setDefaultsOnInsert: true });
 
-// Only the registrations of the active mode are used. The other list is hidden, never deleted.
-const kindFilter = (mode) => (mode === 'team' ? { kind: 'team' } : { kind: { $ne: 'team' } });
+// Only the registrations of the active mode are used. The other lists are hidden, never deleted.
+const kindFilter = (mode) => (mode === 'team' ? { kind: 'team' }
+  : mode === 'solo' ? { kind: 'solo' }
+  : { kind: { $nin: ['team', 'solo'] } });
+const modeOf = (event) => (MODES.includes(event.mode) ? event.mode : 'open');
+
+const categoryIsOpen = (settings, id) =>
+  settings.enabledCategories === undefined || settings.enabledCategories === null
+    ? true
+    : settings.enabledCategories.includes(id);
+const categoryMax = (settings, id) => {
+  const own = Number((settings.catMax || {})[id]);
+  return Number.isInteger(own) && own >= 1 ? own : (settings.maxTeams || DEFAULT_MAX_TEAMS);
+};
 
 // The slot summary used by both the public page and the admin page
-// In By Team mode, one slot = one team and "max" = max teams.
+// Open Play: one slot = one player. By Team: one slot = one team. Solo: one slot = one player. By Team and Solo are counted per category.
 async function getSlots() {
   const [settings, event] = await Promise.all([getSettings(), getEvent()]);
-  const mode = event.mode === 'team' ? 'team' : 'open';
-  const max = mode === 'team' ? (settings.maxTeams || DEFAULT_MAX_TEAMS) : settings.maxPlayers;
+  const mode = modeOf(event);
+
+  if (mode !== 'open') {
+    const grouped = await Registration.aggregate([
+      { $match: { status: { $in: OCCUPYING }, ...kindFilter(mode) } },
+      { $group: { _id: '$category', n: { $sum: 1 } } },
+    ]);
+    const countOf = (id) => (grouped.find((g) => g._id === id) || { n: 0 }).n;
+    const occupied = grouped.reduce((sum, g) => sum + g.n, 0);   // includes older registrations that have no category
+    const categories = CATEGORIES.filter((c) => c.mode === mode).map((c) => {
+      const enabled = categoryIsOpen(settings, c.id);
+      const max = categoryMax(settings, c.id);
+      const used = countOf(c.id);
+      return {
+        id: c.id, label: c.label, enabled, max,
+        occupied: used,
+        availableSlots: enabled ? Math.max(max - used, 0) : 0,
+        isFull: enabled && used >= max,
+      };
+    });
+    const availableSlots = categories.reduce((sum, c) => sum + c.availableSlots, 0);
+    const max = occupied + availableSlots;
+    return {
+      mode, max, maxPlayers: max, occupied, availableSlots,
+      isFull: availableSlots <= 0,
+      categories,
+    };
+  }
+
+  const max = settings.maxPlayers;
   const occupied = await Registration.countDocuments({ status: { $in: OCCUPYING }, ...kindFilter(mode) });
   return {
     mode,
@@ -186,15 +239,17 @@ app.get('/api/event', async (req, res, next) => {
 app.get('/api/players', async (req, res, next) => {
   try {
     const event = await getEvent();
-    const mode = event.mode === 'team' ? 'team' : 'open';
+    const mode = modeOf(event);
     const players = await Registration
       .find({ status: { $in: OCCUPYING }, showOnPublicList: true, ...kindFilter(mode) })
       .sort({ registrationTimestamp: 1 })
       .lean();
     res.json(players.map((p) => ({
       // By Team: only the team name is shown
-      displayName: mode === 'team' ? (p.teamName || publicName(p.fullName)) : publicName(p.fullName),
+      displayName: mode === 'team' ? (p.teamName || publicName(p.fullName)) : publicName(p.fullName),   // Solo shows first name + last initial
       playerTag: p.playerTag,
+      category: mode !== 'open' ? (p.category || '') : '',
+      categoryLabel: mode !== 'open' && CATEGORY_MAP[p.category] ? CATEGORY_MAP[p.category].label : '',
       paid: p.paid === true,
       // Paid = the admin checked it. Pending = a reference number was sent, waiting for the admin. Unpaid = nothing sent yet.
       // (the reference number itself is never sent to the public page)
@@ -208,10 +263,15 @@ async function createRegistration(req, res, next) {
   try {
     const b = req.body;
     const event = await getEvent();
-    const isTeam = event.mode === 'team';   // the active mode decides, not the browser
-    const kind = isTeam ? 'team' : 'player';
+    const mode = modeOf(event);              // the active mode decides, not the browser
+    const isTeam = mode === 'team';
+    const isSolo = mode === 'solo';          // Solo: one player, no partner, no team name
+    const hasCategory = isTeam || isSolo;
+    const kind = isTeam ? 'team' : isSolo ? 'solo' : 'player';
     const teamName = String(b.teamName || '').trim();
     const partnerName = String(b.partnerName || '').trim();
+    const category = hasCategory ? String(b.category || '').trim() : '';
+    const cat = CATEGORY_MAP[category] && CATEGORY_MAP[category].mode === mode ? CATEGORY_MAP[category] : null;
 
     if (!b.fullName || !String(b.fullName).trim() || !b.contactNumber || !String(b.contactNumber).trim()) {
       return res.status(400).json({
@@ -219,13 +279,18 @@ async function createRegistration(req, res, next) {
         details: [isTeam ? 'Player 1 name and contact number are required.' : 'Full name and contact number are required.'],
       });
     }
-    if (isTeam) {
+    if (hasCategory) {
       const problems = [];
-      if (!teamName) problems.push('Team name is required.');
-      if (teamName.length > 40) problems.push('Team name is too long (40 characters max).');
-      if (!partnerName) problems.push('Player 2 name is required.');
+      const settingsNow = await getSettings();
+      if (!cat) problems.push('Please choose a category.');
+      else if (!categoryIsOpen(settingsNow, category)) problems.push('That category is not open for registration.');
+      if (isTeam) {
+        if (!teamName) problems.push('Team name is required.');
+        if (teamName.length > 40) problems.push('Team name is too long (40 characters max).');
+        if (!partnerName) problems.push('Player 2 name is required.');
+      }
       if (!String(b.municipalityOrCity || '').trim() || !String(b.barangay || '').trim()) {
-        problems.push('Municipality / City and barangay are required.');
+        problems.push('Municipality / city and barangay are required.');
       }
       if (problems.length) {
         return res.status(400).json({ message: 'Please fix the highlighted fields.', details: problems });
@@ -279,6 +344,12 @@ async function createRegistration(req, res, next) {
     if (slots.availableSlots <= 0) {
       return res.status(409).json({ message: 'Sorry, all slots are taken.' });
     }
+    if (hasCategory) {
+      const catSlots = slots.categories.find((c) => c.id === category);
+      if (!catSlots || catSlots.availableSlots <= 0) {
+        return res.status(409).json({ message: `Sorry, the ${cat.label} category is full.` });
+      }
+    }
     const status = paymentRequired ? 'pending' : NEW_REGISTRATION_STATUS;
 
     const registration = await Registration.create({
@@ -294,13 +365,14 @@ async function createRegistration(req, res, next) {
       kind,
       teamName: isTeam ? teamName : '',
       partnerName: isTeam ? partnerName : '',
+      category,
       status,
     });
 
     res.status(201).json({
       message: status === 'pending'
-        ? (isTeam ? 'Your team slot is reserved. It will be confirmed after your payment is checked.' : 'Your slot is reserved. It will be confirmed after your payment is checked.')
-        : (isTeam ? 'Your team slot is reserved!' : 'Your slot is reserved!'),
+        ? (isSolo ? 'Your solo slot is reserved. It will be confirmed after your payment is checked.' : isTeam ? 'Your team slot is reserved. It will be confirmed after your payment is checked.' : 'Your slot is reserved. It will be confirmed after your payment is checked.')
+        : (isSolo ? 'Your solo slot is reserved!' : isTeam ? 'Your team slot is reserved!' : 'Your slot is reserved!'),
       status,
       registration,
       slots: await getSlots(),
@@ -369,14 +441,14 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
 
     const event = await getEvent();
-    const mode = event.mode === 'team' ? 'team' : 'open';
+    const mode = modeOf(event);
     const filter = { ...kindFilter(mode) };   // only the active mode's list is shown
     if (STATUSES.includes(req.query.status)) filter.status = req.query.status;
     if (TAGS.includes(req.query.playerTag)) filter.playerTag = req.query.playerTag;
+    if (mode !== 'open' && CATEGORY_MAP[req.query.category]) filter.category = req.query.category;
     if (req.query.paid === 'true') filter.paid = true;
     if (req.query.paid === 'false') filter.paid = { $ne: true };   // also matches older records without the field
 
-    
     // Payment chips of the admin page: paid / pending (reference sent, waiting for the admin) / unpaid (nothing sent)
     const noRef = { $in: ['', null] };   // an empty reference, or older records without the field
     if (req.query.payment === 'paid') filter.paid = true;
@@ -390,7 +462,7 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
     const q = String(req.query.q || '').trim().slice(0, 60);
     if (q) {
       const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');   // the text is searched as plain text, never as a pattern
-      const or = ['fullName', 'contactNumber', 'email', 'province', 'municipalityOrCity', 'barangay', 'playerTag', 'paymentRef', 'teamName', 'partnerName']
+      const or = ['fullName', 'contactNumber', 'email', 'province', 'municipalityOrCity', 'barangay', 'playerTag', 'paymentRef', 'teamName', 'partnerName', 'category']
         .map((f) => ({ [f]: rx }));
       const digits = q.replace(/\D/g, '');
       if (digits.length >= 4) {                       // 0917... / +63917... / 63917... all match the same number
@@ -399,7 +471,7 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
       filter.$or = or;
     }
 
-      const [total, registrations, occupying, paidOccupying, pendingOccupying] = await Promise.all([
+    const [total, registrations, occupying, paidOccupying, pendingOccupying] = await Promise.all([
       Registration.countDocuments(filter),
       Registration.find(filter)
         .sort({ registrationTimestamp: 1 })
@@ -410,8 +482,9 @@ app.get('/api/admin/registrants', requireAdmin, async (req, res, next) => {
       Registration.countDocuments({ status: { $in: OCCUPYING }, paid: true, ...kindFilter(mode) }),
       Registration.countDocuments({ status: { $in: OCCUPYING }, paid: { $ne: true }, paymentRef: { $nin: ['', null] }, ...kindFilter(mode) }),
     ]);
-    // How many registrations are hidden because they belong to the other mode (for the switch warning)
-    const hiddenCount = await Registration.countDocuments({ status: { $in: OCCUPYING }, ...kindFilter(mode === 'team' ? 'open' : 'team') });
+    // How many registrations are hidden because they belong to the other modes (for the switch warning)
+    const otherKinds = mode === 'open' ? { kind: { $in: ['team', 'solo'] } } : { kind: { $ne: mode } };
+    const hiddenCount = await Registration.countDocuments({ status: { $in: OCCUPYING }, ...otherKinds });
     res.json({
       mode,
       hiddenCount,
@@ -446,8 +519,12 @@ app.patch('/api/admin/registrants/:id', requireAdmin, async (req, res, next) => 
       const willOccupy = OCCUPYING.includes(status);
       const slots = await getSlots();
 
-      if (!wasOccupying && willOccupy && slots.availableSlots <= 0) {
-        return res.status(409).json({ message: 'There are no open slots left. Raise the max players first.' });
+      if (!wasOccupying && willOccupy) {
+        const catSlots = registration.kind !== 'player' && slots.categories
+          ? slots.categories.find((c) => c.id === registration.category) : null;
+        if (catSlots ? catSlots.occupied >= catSlots.max : slots.availableSlots <= 0) {
+          return res.status(409).json({ message: 'There are no open slots left. Raise the max first.' });
+        }
       }
       registration.status = status;
     }
@@ -493,6 +570,32 @@ app.patch('/api/settings/max-players', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// By Team and Solo categories: which ones are open and the max of each -> slot summary + message
+app.patch('/api/settings/categories', requireAdmin, async (req, res, next) => {
+  try {
+    const { enabled, max } = req.body || {};
+    const $set = {};
+    if (enabled !== undefined) {
+      if (!Array.isArray(enabled) || enabled.some((id) => !CATEGORY_MAP[id])) {
+        return res.status(400).json({ message: 'Invalid category list.' });
+      }
+      $set.enabledCategories = [...new Set(enabled)];
+    }
+    if (max !== undefined) {
+      if (typeof max !== 'object' || max === null) return res.status(400).json({ message: 'Invalid max values.' });
+      for (const [id, raw] of Object.entries(max)) {
+        const value = Number(raw);
+        if (!CATEGORY_MAP[id] || !Number.isInteger(value) || value < 1 || value > 200) {
+          return res.status(400).json({ message: 'Each max must be a whole number from 1 to 200.' });
+        }
+        $set[`catMax.${id}`] = value;
+      }
+    }
+    await Setting.findOneAndUpdate({ key: 'main' }, { $set }, { upsert: true, new: true, setDefaultsOnInsert: true });
+    res.json({ ...(await getSlots()), message: 'Categories saved.' });
+  } catch (err) { next(err); }
+});
+
 // Event details (venue, fee, date, notes...)
 app.get('/api/admin/event', requireAdmin, async (req, res, next) => {
   try { res.json(await getEvent()); } catch (err) { next(err); }
@@ -510,7 +613,7 @@ app.patch('/api/admin/event', requireAdmin, async (req, res, next) => {
     if (b.fee !== undefined) update.fee = String(b.fee).trim();
     if (b.mode !== undefined) {
       if (MODES.includes(b.mode)) update.mode = b.mode;
-      else problems.push('Registration type must be Open Play or By Team.');
+      else problems.push('Registration type must be Open Play, Solo or By Team.');
     }
     if (b.notes !== undefined) {
       update.notes = Array.isArray(b.notes)

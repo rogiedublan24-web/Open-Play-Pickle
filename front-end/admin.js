@@ -23,15 +23,20 @@ let adminKey = '';
 try { sessionStorage.removeItem(KEY_STORAGE); } catch { /* storage blocked */ }
 
 let page = 1;
-let currentMode = 'open';    // 'open' = Open Play, 'team' = By Team (the server decides)
+let currentMode = 'open';    // 'open' = Open Play, 'team' = By Team, 'solo' = Solo (the server decides)
 let lastOccupied = 0;        // used in the switch warning
+let catView = '';            // By Team / Solo: the category whose list is shown
+let lastCats = [];           // the categories (with their counts) from the last slot summary
 let payFilter = '';          // the active payment chip: '' (all) | 'pending' | 'unpaid' | 'paid'
 
 // The event title that is set automatically when you switch the registration type
 const DEFAULT_TITLES = {
   open: 'Open Play Event',
   team: 'Pickleball Doubles Tournament',
+  solo: 'Pickleball Solo Tournament',
 };
+const MODE_NAMES = { open: 'Open Play', team: 'By Team', solo: 'Solo' };
+const MODE_CATEGORIES = { team: ['allboys', 'allgirls', 'mixed'], solo: ['soloboy', 'sologirl'] };   // categories of each mode
 
 /* =====================================================================
    2. API LAYER - same idea as the public page, plus the x-admin-key header
@@ -85,6 +90,7 @@ const api = {
     method: 'PATCH',
     body: JSON.stringify(mode === 'team' ? { maxTeams: value } : { maxPlayers: value }),
   }),
+  setCategories: (body) => request('/settings/categories', { method: 'PATCH', body: JSON.stringify(body) }),
   getEvent: () => request('/admin/event'),
   updateEvent: (body) => request('/admin/event', { method: 'PATCH', body: JSON.stringify(body) }),
 };
@@ -192,18 +198,140 @@ function handleError(err) {
    ===================================================================== */
 // Changes the words and the table columns to match the active mode
 function applyMode(mode) {
-  const m = mode === 'team' ? 'team' : 'open';
+  const m = mode === 'team' || mode === 'solo' ? mode : 'open';
+  const changed = m !== currentMode;
   currentMode = m;
-  const team = m === 'team';
+  const withCategories = m !== 'open';
   if (document.activeElement !== $('mode-select')) $('mode-select').value = m;
-  $('lbl-occupied').textContent = team ? 'Teams' : 'Players';
-  $('lbl-max').textContent = team ? 'Max teams' : 'Max players';
-  $('max-label').textContent = team ? 'Change maximum teams' : 'Change maximum players';
-  $('th-player').textContent = team ? 'Team' : 'Player';
-  $('filter-search').closest('.field').querySelector('label').textContent = team ? 'Search team' : 'Search player';
-  $('tag-field').hidden = team;
+  $('tag-field').hidden = withCategories;
+  $('cat-filter-field').hidden = true;         // the old dropdown stays hidden: the category buttons above the table are used instead
+  $('cat-chips').hidden = !withCategories;
+  $('cat-card').hidden = !withCategories;      // categories (with their own max) replace the single max box in By Team and Solo
+  $('max-card').hidden = withCategories;
   $('reg-table').dataset.mode = m;
+  if (changed || !$('filter-category').options.length) {
+    // The category filter and the category card only list the categories of the active mode
+    const filter = $('filter-category');
+    filter.replaceChildren(new Option('All', ''));
+    (MODE_CATEGORIES[m] || []).forEach((id) => filter.appendChild(new Option(CATEGORY_LABELS[id], id)));
+    catView = (MODE_CATEGORIES[m] || [])[0] || '';   // each category has its own list: the first one is shown first
+    filter.value = catView;
+    $('cat-heading').textContent = m === 'solo' ? 'Solo categories' : 'By Team categories';
+    $('cat-help').textContent = m === 'solo'
+      ? 'Choose which solo categories are open: Solo Boy, Solo Girl, or both. Each one has its own maximum slots (one slot = one player).'
+      : 'Choose which categories are open: All Boys, All Girls, Boy / Girl, or any of them together. Each one has its own maximum slots (one slot = one team).';
+  }
 }
+
+// By Team categories. Must match the list in the API (CATEGORIES).
+const CATEGORY_LABELS = { allboys: 'All Boys', allgirls: 'All Girls', mixed: 'Boy / Girl', soloboy: 'Solo Boy', sologirl: 'Solo Girl' };
+
+// One row per category: a check box (open or not) and its own max
+function renderCategoryEditor(cats) {
+  if (!cats || $('cat-card').contains(document.activeElement)) return;   // do not rebuild while you are typing
+  const list = $('cat-list');
+  list.replaceChildren();
+  cats.forEach((c) => {
+    const row = document.createElement('div');
+    row.className = 'cat-row';
+
+    const label = document.createElement('label');
+    label.className = 'cat-open';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = c.enabled;
+    box.dataset.cat = c.id;
+    const name = document.createElement('span');
+    name.textContent = c.label;
+    const used = document.createElement('small');
+    used.className = 'muted';
+    used.textContent = `${c.occupied} registered`;
+    label.append(box, name, used);
+
+    const maxLabel = document.createElement('label');
+    maxLabel.className = 'cat-max';
+    maxLabel.append('Max ');
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.max = '200';
+    input.step = '1';
+    input.inputMode = 'numeric';
+    input.value = c.max;
+    input.dataset.catMax = c.id;
+    input.setAttribute('aria-label', `Max slots for ${c.label}`);
+    maxLabel.append(input);
+
+    row.append(label, maxLabel);
+    list.appendChild(row);
+  });
+}
+
+// Buttons above the table: one list per category (not used in Open Play)
+function renderCatChips() {
+  const box = $('cat-chips');
+  box.replaceChildren();
+  if (currentMode === 'open') return;
+  lastCats.forEach((c) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip' + (c.id === catView ? ' active' : '');
+    b.setAttribute('aria-pressed', String(c.id === catView));
+    b.append(`${c.label} `);
+    const n = document.createElement('span');
+    n.className = 'count';
+    n.textContent = c.occupied;
+    b.append(n);
+    b.addEventListener('click', () => {
+      catView = c.id;
+      $('filter-category').value = c.id;
+      renderCatChips();
+      reloadFromFirstPage();
+    });
+    box.appendChild(b);
+  });
+}
+
+function showCatMessage(text, kind) {
+  const el = $('cat-msg');
+  el.textContent = text;
+  el.className = 'form-msg' + (kind ? ` ${kind}` : '');
+}
+
+$('cat-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  showCatMessage('', '');
+  const enabled = [...document.querySelectorAll('#cat-list input[data-cat]')].filter((b) => b.checked).map((b) => b.dataset.cat);
+  const max = {};
+  for (const input of document.querySelectorAll('#cat-list input[data-cat-max]')) {
+    const value = Number(input.value);
+    if (!Number.isInteger(value) || value < 1 || value > 200) {
+      return showCatMessage(`${CATEGORY_LABELS[input.dataset.catMax]}: enter a whole number from 1 to 200.`, 'bad');
+    }
+    max[input.dataset.catMax] = value;
+  }
+  if (enabled.length === 0) {
+    const sure = await showDialog({
+      kind: 'danger', title: 'Close all categories?',
+      message: 'Nobody will be able to register until you open at least one category.',
+      confirmText: 'Yes, close all', cancelText: 'Cancel',
+    });
+    if (!sure) return;
+  }
+  const btn = $('cat-btn');
+  btn.disabled = true;
+  try {
+    const result = await api.setCategories({ enabled, max });
+    document.activeElement?.blur?.();
+    renderSlotSummary(result);
+    showCatMessage(result.message, 'ok');
+  } catch (err) {
+    if (err.status === 401) return logout('Your admin key was rejected. Please sign in again.');
+    showCatMessage(errorText(err), 'bad');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 function renderSlotSummary(s) {
   if (s.mode) applyMode(s.mode);
@@ -212,6 +340,7 @@ function renderSlotSummary(s) {
   $('sum-available').textContent = s.availableSlots;
   $('sum-max').textContent = s.max ?? s.maxPlayers;
   if (document.activeElement !== $('max-input')) $('max-input').value = s.max ?? s.maxPlayers;
+  if (s.categories) { lastCats = s.categories; renderCategoryEditor(s.categories); renderCatChips(); }
 }
 
 async function loadSlots() {
@@ -283,6 +412,7 @@ function buildRow(reg, number) {
   });
 
   const isTeam = reg.kind === 'team';
+  const isSolo = reg.kind === 'solo';
   const label = isTeam ? (reg.teamName || reg.fullName) : reg.fullName;   // used in messages
   const tagSelect = makeSelect(TAGS, reg.playerTag, `Tag for ${label}`);
   tagSelect.className = 'tag-select';
@@ -319,6 +449,29 @@ function buildRow(reg, number) {
     }
   });
 
+  // One tap: mark as paid (and confirm the slot if it was still pending)
+  let markPaidBtn = null;
+  if (!reg.paid && reg.status !== 'cancelled') {
+    markPaidBtn = document.createElement('button');
+    markPaidBtn.type = 'button';
+    markPaidBtn.className = 'btn btn-paid btn-sm';
+    markPaidBtn.textContent = 'Mark paid';
+    markPaidBtn.addEventListener('click', async () => {
+      showMessage('', '');
+      markPaidBtn.disabled = true;
+      try {
+        await api.updateRegistration(reg._id, {
+          paid: true,
+          ...(reg.status === 'pending' ? { status: 'confirmed' } : {}),
+        });
+        showMessage(`${label}: marked as paid.`, 'ok');
+        await Promise.all([loadRegistrations(), loadSlots()]);
+      } catch (err) {
+        handleError(err);
+        markPaidBtn.disabled = false;
+      }
+    });
+  }
 
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
@@ -351,11 +504,16 @@ function buildRow(reg, number) {
 
   const actions = document.createElement('div');
   actions.className = 'actions';
+  if (markPaidBtn) actions.append(markPaidBtn);
   actions.append(saveBtn, deleteBtn);
 
-  const playerCell = isTeam
+  const playerCell = isSolo
+    ? cell(textWithSub(reg.fullName, 'Solo player (no partner yet)'))
+    : isTeam
     ? cell(textWithSub(reg.teamName || '(no team name)', `P1: ${reg.fullName} · P2: ${reg.partnerName || '-'}`))
     : cell(textWithSub(reg.fullName, reg.email));
+  const catCell = cell(isTeam || isSolo ? (CATEGORY_LABELS[reg.category] || '-') : '');
+  catCell.className = 'col-cat';
   const addressCell = cell(address);
   addressCell.className = 'col-addr';
   const tagCell = cell(tagSelect);
@@ -364,6 +522,7 @@ function buildRow(reg, number) {
   tr.append(
     cell(String(number)),
     playerCell,
+    catCell,
     cell(textWithSub(reg.contactNumber, reg.paymentRef ? `Ref: ${reg.paymentRef}` : '')),
     addressCell,
     cell(registered),
@@ -404,7 +563,7 @@ function renderTable({ total, registrations, paidCount, unpaidCount, mode, count
   if (registrations.length === 0) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = 9;
+    td.colSpan = 10;
     td.className = 'empty-row';
     td.textContent = 'No registrations found.';
     tr.appendChild(td);
@@ -424,6 +583,7 @@ function currentFilters() {
   const params = {};
   if ($('filter-status').value) params.status = $('filter-status').value;
   if ($('filter-tag').value) params.playerTag = $('filter-tag').value;
+  if (currentMode !== 'open' && $('filter-category').value) params.category = $('filter-category').value;
   if (payFilter) params.payment = payFilter;
   const search = $('filter-search').value.trim();
   if (search) params.q = search;
@@ -438,7 +598,10 @@ async function loadRegistrations() {
     page -= 1;
     return loadRegistrations();
   }
+  const before = currentMode;
   renderTable(data);
+  // The type was switched (for example by another admin): load again, now for the category that is shown
+  if (currentMode !== before && currentMode !== 'open') return loadRegistrations();
 }
 
 function reloadFromFirstPage() {
@@ -459,6 +622,7 @@ $('filter-search').addEventListener('keydown', (e) => {
 
 $('filter-status').addEventListener('change', reloadFromFirstPage);
 $('filter-tag').addEventListener('change', reloadFromFirstPage);
+$('filter-category').addEventListener('change', reloadFromFirstPage);
 document.querySelectorAll('#pay-chips .chip').forEach((chip) => {
   chip.addEventListener('click', () => { setPayFilter(chip.dataset.pay); reloadFromFirstPage(); });
 });
@@ -509,15 +673,32 @@ async function exportCsv() {
     }
 
     const team = currentMode === 'team';
-    const header = team ? [
-      'No.', 'Team name', 'Player 1 (captain)', 'Contact number', 'Player 2',
+    const solo = currentMode === 'solo';
+    const header = solo ? [
+      'No.', 'Category', 'Full name', 'Contact number', 'Municipality / City', 'Barangay',
+      'Status', 'Payment', 'GCash reference', 'On public list', 'Registered (PH time)',
+    ] : team ? [
+      'No.', 'Category', 'Team name', 'Player 1 (captain)', 'Contact number', 'Player 2',
       'Status', 'Payment', 'GCash reference', 'On public list', 'Registered (PH time)',
     ] : [
       'No.', 'Full name', 'Contact number', 'Email', 'Province', 'Municipality / City',
       'Barangay', 'Player tag', 'Status', 'Payment', 'GCash reference', 'On public list', 'Registered (PH time)',
     ];
-    const rows = all.map((r, i) => team ? [
+    const rows = all.map((r, i) => solo ? [
       csvCell(i + 1),
+      csvCell(CATEGORY_LABELS[r.category] || ''),
+      csvCell(r.fullName),
+      csvCell(r.contactNumber, { phone: true }),
+      csvCell(r.municipalityOrCity),
+      csvCell(r.barangay),
+      csvCell(r.status),
+      csvCell(r.paid ? 'Paid' : 'Unpaid'),
+      csvCell(r.paymentRef, { phone: true }),
+      csvCell(r.showOnPublicList ? 'Yes' : 'No'),
+      csvCell(formatManila(r.registrationTimestamp)),
+    ] : team ? [
+      csvCell(i + 1),
+      csvCell(CATEGORY_LABELS[r.category] || ''),
       csvCell(r.teamName),
       csvCell(r.fullName),
       csvCell(r.contactNumber, { phone: true }),
@@ -543,13 +724,13 @@ async function exportCsv() {
       csvCell(formatManila(r.registrationTimestamp)),
     ]);
 
-    const csv = '\uFEFF' + [header.map((h) => csvCell(h)), ...rows].map((r) => r.join(',')).join('\r\n');
+    const csv = '﻿' + [header.map((h) => csvCell(h)), ...rows].map((r) => r.join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }).format(new Date());
 
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${currentMode === 'team' ? 'teams' : 'registrations'}-${today}.csv`;
+    link.download = `${currentMode === 'team' ? 'teams' : currentMode === 'solo' ? 'solo-players' : 'registrations'}-${today}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -566,7 +747,7 @@ async function exportCsv() {
 $('export-btn').addEventListener('click', exportCsv);
 
 /* =====================================================================
-   6c. SWITCH REGISTRATION TYPE - Open Play <-> By Team
+   6c. SWITCH REGISTRATION TYPE - Open Play / Solo / By Team
    ===================================================================== */
 function showModeMessage(text, kind) {
   const el = $('mode-msg');
@@ -579,13 +760,12 @@ $('mode-btn').addEventListener('click', async () => {
   const target = $('mode-select').value;
   if (target === currentMode) return showModeMessage('That type is already active.', '');
 
-  const toTeam = target === 'team';
   const hiding = lastOccupied;
-  const hidden = currentMode === 'team' ? 'teams' : 'Open Play players';
+  const hidden = currentMode === 'team' ? 'teams' : currentMode === 'solo' ? 'Solo players' : 'Open Play players';
   const sure = await showDialog({
     kind: 'danger',
-    title: toTeam ? 'Switch to By Team?' : 'Switch to Open Play?',
-    message: `Switching to ${toTeam ? 'By Team' : 'Open Play'} will hide the ${hiding} ${hiding === 1 ? hidden.replace(/s$/, '') : hidden} now on the list. They are not deleted, and they come back when you switch again. The public page will show the ${toTeam ? 'team' : 'player'} form and list right away. The event title will change to "${DEFAULT_TITLES[target]}" (you can edit it in the Event tab).`,
+    title: `Switch to ${MODE_NAMES[target]}?`,
+    message: `Switching to ${MODE_NAMES[target]} will hide the ${hiding} ${hiding === 1 ? hidden.replace(/s$/, '') : hidden} now on the list. They are not deleted, and they come back when you switch again. The public page will show the ${MODE_NAMES[target]} form and list right away. The event title will change to "${DEFAULT_TITLES[target]}" (you can edit it in the Event tab).`,
     confirmText: 'Yes, switch',
     cancelText: 'Cancel',
   });
@@ -600,9 +780,10 @@ $('mode-btn').addEventListener('click', async () => {
     $('filter-search').value = '';
     $('filter-status').value = '';
     $('filter-tag').value = '';
+    $('filter-category').value = '';
     setPayFilter('');
     await Promise.all([loadRegistrations(), loadSlots()]);
-    showModeMessage(`Now using ${toTeam ? 'By Team' : 'Open Play'} registration.`, 'ok');
+    showModeMessage(`Now using ${MODE_NAMES[target]} registration.`, 'ok');
   } catch (err) {
     if (err.status === 401) return logout('Your admin key was rejected. Please sign in again.');
     showModeMessage(errorText(err), 'bad');
@@ -800,7 +981,7 @@ $('event-form').addEventListener('submit', async (e) => {
    Red error messages stay until the problem is fixed.
    ===================================================================== */
 (function autoHideSuccessMessages() {
-  const HIDE_AFTER_MS = 8000;
+  const HIDE_AFTER_MS = 4000;
   const timers = new WeakMap();
   document.querySelectorAll('.form-msg').forEach((el) => {
     const check = () => {

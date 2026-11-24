@@ -418,41 +418,140 @@ $('pay-copy').addEventListener('click', async () => {
 });
 
 let isFull = false;
-let currentMode = 'open';   // 'open' = Open Play form, 'team' = By Team form (the organizer chooses in Admin)
+let currentMode = 'open';   // 'open' = Open Play form, 'team' = By Team form, 'solo' = Solo form (the organizer chooses in Admin)
 let submitting = false;
 let registrationClosed = false;   // true once the countdown has reached zero
 
+let viewCategory = '';   // the category whose slots are shown (By Team / Solo): each category has its own slots
+let lastSlots = null;    // the last data from the server, so a click on a category can redraw at once
+let lastPlayers = [];
+let teamCategories = [];   // By Team / Solo categories from GET /slots: [{ id, label, enabled, max, occupied, availableSlots, isFull }]
+
+function selectedCategory() {
+  const id = $('tf-category').value;
+  return teamCategories.find((c) => c.id === id) || null;
+}
+
 function updateSubmitButton() {
   const team = currentMode === 'team';
-  const btn = $(team ? 'team-submit-btn' : 'submit-btn');
-  btn.disabled = submitting || isFull || registrationClosed;
+  const withCategories = currentMode !== 'open';
+  const btn = $(withCategories ? 'team-submit-btn' : 'submit-btn');
+  const cat = withCategories ? selectedCategory() : null;
+  const noCategory = withCategories && !teamCategories.some((c) => c.enabled);
+  const catFull = Boolean(cat && cat.isFull);
+  btn.disabled = submitting || isFull || registrationClosed || noCategory || catFull;
   btn.textContent = submitting ? 'Registering...'
     : registrationClosed ? 'Registration closed'
+    : noCategory ? 'No category is open yet'
+    : catFull ? `${cat.label} is full`
     : isFull ? (team ? 'All team slots taken' : 'All slots taken')
-    : (team ? 'Reserve our team slot' : 'Reserve my slot');
+    : team ? 'Reserve our team slot'
+    : withCategories ? 'Reserve my solo slot'
+    : 'Reserve my slot';
 }
+
+// Solo categories have one player only: hide the team name and Player 2, and change the words
+function applySoloLayout() {
+  const solo = currentMode === 'solo';   // Solo: one player, so no team name and no Player 2
+  $('field-teamName').hidden = solo;
+  $('field-partnerName').hidden = solo;
+  // The labels follow the chosen category: Boy / Girl = Player 1 is the boy, Player 2 is the girl
+  const cat = $('tf-category').value;
+  const who = cat === 'mixed' ? ' (Boy)' : cat === 'allboys' ? ' (Boy)' : cat === 'allgirls' ? ' (Girl)' : '';
+  const who2 = cat === 'mixed' ? ' (Girl)' : who;
+  $('lbl-fullName').textContent = solo ? 'Your full name' : `Player 1${who} full name`;
+  $('lbl-contactNumber').textContent = solo ? 'Your contact number' : `Player 1${who} contact number`;
+  const l2 = $('lbl-partnerName');
+  if (l2) l2.textContent = `Player 2${who2} full name`;
+  $('team-legend').textContent = solo ? 'Where are you from?' : 'Where is your team from?';
+  $('team-hint-top').textContent = solo ? 'Solo: you register alone. The organizer will find you a partner.'
+    : cat === 'mixed' ? 'One team = 1 boy and 1 girl. Player 1 is the boy (captain), Player 2 is the girl.'
+    : 'One team = 2 players. The captain (Player 1) registers the team.';
+  $('team-hint-pay').textContent = solo ? 'When you send your GCash reference later, use the contact number you registered with.' : 'One payment per team. When you send your GCash reference later, use the captain\'s contact number.';
+  $('consent-text').textContent = solo ? 'I agree to show my first name and last initial on the public list.' : 'I agree to show our team name on the public list.';
+  updateSubmitButton();
+}
+
+// Fills the category dropdown (only the open ones) and the category buttons under the counter
+function renderCategories(cats) {
+  teamCategories = cats || [];
+  const select = $('tf-category');
+  const keep = select.value;
+  const open = teamCategories.filter((c) => c.enabled);
+  select.replaceChildren();   // no "Choose a category" line: only the open categories are listed
+  open.forEach((c) => {
+    const o = new Option(c.isFull ? `${c.label} (full)` : `${c.label} (${c.availableSlots} left)`, c.id);
+    o.disabled = c.isFull;
+    select.appendChild(o);
+  });
+  const stay = open.find((c) => c.id === keep && !c.isFull);
+  const first = open.find((c) => !c.isFull);
+  select.value = stay ? stay.id : first ? first.id : '';   // keeps your choice, otherwise the first open category
+
+  const list = $('cat-summary');
+  list.replaceChildren();
+  if (!open.some((c) => c.id === viewCategory)) viewCategory = open.length ? open[0].id : '';
+  open.forEach((c) => {
+    const li = document.createElement('li');
+    li.className = (c.isFull ? 'full' : '') + (c.id === viewCategory ? ' on' : '');
+    li.setAttribute('role', 'button');
+    li.tabIndex = 0;
+    li.setAttribute('aria-pressed', String(c.id === viewCategory));
+    const pick = () => {
+      viewCategory = c.id;
+      if (!c.isFull) { $('tf-category').value = c.id; applySoloLayout(); }   // the form follows the category you opened
+      if (lastSlots) renderSlots(lastSlots, lastPlayers);
+    };
+    li.addEventListener('click', pick);
+    li.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+    const name = document.createElement('span');
+    name.textContent = c.label;
+    const count = document.createElement('b');
+    count.textContent = `${c.occupied}/${c.max}`;
+    li.append(name, count);
+    list.appendChild(li);
+  });
+  list.hidden = currentMode === 'open' || open.length === 0;
+  applySoloLayout();
+}
+
+$('tf-category').addEventListener('change', () => {
+  setTeamError('category', '');
+  applySoloLayout();
+  if ($('tf-category').value) { viewCategory = $('tf-category').value; if (lastSlots) renderSlots(lastSlots, lastPlayers); }
+});
 
 // Shows the Open Play form or the By Team form, and changes the words to match
 function applyMode(mode) {
-  const m = mode === 'team' ? 'team' : 'open';
+  const m = mode === 'team' || mode === 'solo' ? mode : 'open';
   currentMode = m;
   const team = m === 'team';
-  $('reg-form').hidden = team;
-  $('team-form').hidden = !team;
-  $('reg-heading').textContent = team ? 'Register your team' : 'Register';
+  const withCategories = m !== 'open';   // By Team and Solo use the category form
+  $('reg-form').hidden = withCategories;
+  $('team-form').hidden = !withCategories;
+  $('reg-heading').textContent = team ? 'Register your team' : m === 'solo' ? 'Register (Solo)' : 'Register';
   $('counter-label').textContent = team ? 'teams' : 'players';
   $('slot-grid').setAttribute('aria-label', team ? 'Team slots' : 'Player slots');
+  if (!withCategories) $('cat-summary').hidden = true;
 }
 
 // slots   = { maxPlayers, occupied, availableSlots, waitlisted, isFull }   from GET /slots
 // players = [ { displayName, playerTag } ]                                  from GET /players
 function renderSlots(slots, players) {
+  lastSlots = slots;
+  lastPlayers = players;
   applyMode(slots.mode);
   const team = currentMode === 'team';
-  const max = slots.max ?? slots.maxPlayers;
-  const registered = Math.min(slots.occupied, max);
-  const left = slots.availableSlots;
-  isFull = slots.isFull;
+  if (currentMode !== 'open') renderCategories(slots.categories);
+  isFull = slots.isFull;   // everything is full (used by the Reserve button)
+
+  // By Team / Solo: the page shows ONE category at a time, with its own slots and its own max
+  const viewCat = currentMode !== 'open' ? teamCategories.find((c) => c.id === viewCategory) : null;
+  const max = viewCat ? viewCat.max : (slots.max ?? slots.maxPlayers);
+  const registered = Math.min(viewCat ? viewCat.occupied : slots.occupied, max);
+  const left = viewCat ? viewCat.availableSlots : slots.availableSlots;
+  const shownFull = viewCat ? viewCat.isFull : slots.isFull;
+  if (viewCat) players = players.filter((p) => p.category === viewCat.id);
 
   // Counter and progress bar
   $('slot-registered').textContent = registered;
@@ -461,19 +560,21 @@ function renderSlots(slots, players) {
   meter.setAttribute('aria-valuemax', max);
   meter.setAttribute('aria-valuenow', registered);
   const fill = $('slot-meter-fill');
-  fill.style.width = `${(registered / max) * 100}%`;
-  fill.className = 'meter-fill' + (isFull ? ' full' : left <= LOW_SLOTS_THRESHOLD ? ' low' : '');
+  fill.style.width = `${max ? (registered / max) * 100 : 0}%`;
+  fill.className = 'meter-fill' + (shownFull ? ' full' : left <= LOW_SLOTS_THRESHOLD ? ' low' : '');
 
   // Status badge
   const badge = $('slot-status');
-  if (isFull) { badge.dataset.state = 'full'; badge.textContent = 'Full'; }
+  if (shownFull) { badge.dataset.state = 'full'; badge.textContent = 'Full'; }
   else if (left <= LOW_SLOTS_THRESHOLD) { badge.dataset.state = 'low'; badge.textContent = 'Almost full'; }
   else { badge.dataset.state = 'open'; badge.textContent = 'Open'; }
 
-  $('slot-left').textContent = isFull
-    ? 'All slots are taken.'
-    : `${left} ${team ? 'team ' : ''}slot${left === 1 ? '' : 's'} left.`;
+  const where = viewCat ? ` in ${viewCat.label}` : '';
+  $('slot-left').textContent = shownFull
+    ? `All slots${where} are taken.`
+    : `${left} ${team ? 'team ' : ''}slot${left === 1 ? '' : 's'} left${where}.`;
 
+  // Slot grid: one cell per slot (filled or empty)
   // Slot grid: one cell per slot (filled or empty)
   const grid = $('slot-grid');
   grid.replaceChildren();
@@ -492,6 +593,12 @@ function renderSlots(slots, players) {
     name.textContent = p ? p.displayName : 'Available';
 
     li.append(no, name);
+    if (p?.categoryLabel && currentMode !== 'open' && !viewCat) {
+      const cat = document.createElement('span');
+      cat.className = 'slot-cat';
+      cat.textContent = p.categoryLabel;
+      li.appendChild(cat);
+    }
     if (p?.playerTag && !team) {
       const tag = document.createElement('span');
       tag.className = 'slot-skill';
@@ -661,7 +768,7 @@ form.addEventListener('submit', async (e) => {
 });
 
 /* =====================================================================
-   6a. BY TEAM FORM - one team = 2 players, one payment per team
+   6a. BY TEAM / SOLO FORM - By Team: one team = 2 players, one payment per team. Solo: one player.
    ===================================================================== */
 const teamForm = $('team-form');
 
@@ -675,12 +782,15 @@ function setTeamError(name, message) {
 function validateTeam(v) {
   let ok = true;
   const check = (name, bad, msg) => { setTeamError(name, bad ? msg : ''); if (bad) ok = false; };
-  check('teamName', v.teamName.length < 2, 'Please enter your team name (at least 2 characters).');
-  check('fullName', v.fullName.length < 2, 'Please enter the captain\'s full name.');
+  const solo = currentMode === 'solo';
+  check('category', !v.category, 'Please choose a category.');
+  check('teamName', !solo && v.teamName.length < 2, 'Please enter your team name (at least 2 characters).');
+  check('fullName', v.fullName.length < 2, solo ? 'Please enter your full name.' : 'Please enter the captain\'s full name.');
   check('contactNumber', !PH_MOBILE.test(v.contactNumber), 'Enter a valid PH mobile number, e.g. 0917 123 4567.');
+  check('partnerName', !solo && v.partnerName.length < 2, 'Please enter Player 2\'s name.');
   check('municipalityOrCity', !v.municipalityOrCity, 'Please enter your municipality or city.');
   check('barangay', !v.barangay, 'Please enter your barangay.');
-  check('consent', !v.consent, 'Your consent is required to show the team name on the list.');
+  check('consent', !v.consent, solo ? 'Your consent is required to show your name on the list.' : 'Your consent is required to show the team name on the list.');
   return ok;
 }
 
@@ -696,11 +806,13 @@ teamForm.addEventListener('submit', async (e) => {
   if (registrationClosed) { showTeamMessage('Registration is closed. The event has already started.', 'bad'); return; }
   unlockSpeech();                       // allow the voice on phones (must happen right on the tap)
 
+  const solo = currentMode === 'solo';
   const values = {
-    teamName: teamForm.teamName.value.trim(),
+    category: $('tf-category').value,
+    teamName: solo ? '' : teamForm.teamName.value.trim(),
     fullName: teamForm.fullName.value.trim(),
     contactNumber: teamForm.contactNumber.value.replace(/[\s-]/g, ''),
-    partnerName: teamForm.partnerName.value.trim(),
+    partnerName: solo ? '' : teamForm.partnerName.value.trim(),
     municipalityOrCity: teamForm.municipalityOrCity.value.trim(),
     barangay: teamForm.barangay.value.trim(),
     consent: teamForm.consent.checked,
@@ -719,15 +831,17 @@ teamForm.addEventListener('submit', async (e) => {
   try {
     const result = await api.register(payload);
     teamForm.reset();
+    applySoloLayout();
 
     const firstName = payload.fullName.split(/\s+/)[0];
+    const who = solo ? 'You are' : `Your team ${payload.teamName} is`;
     const doneMessage = result.status === 'pending'
-      ? `Thank you, ${firstName}. Your team ${payload.teamName} is registered. You can pay online using the "How to pay" box and send your GCash reference number, or just pay when you arrive at the event.`
-      : `Thank you, ${firstName}. Your team ${payload.teamName} is registered. See you on the court!`;
+      ? `Thank you, ${firstName}. ${who} registered. You can pay online using the "How to pay" box and send your GCash reference number, or just pay when you arrive at the event.`
+      : `Thank you, ${firstName}. ${who} registered. See you on the court!`;
     doneAudio = voiceFiles[result.status === 'pending' ? 'pending' : 'confirmed'];
     showDialog({
       kind: 'success',
-      title: 'Your team is registered!',
+      title: solo ? 'You are registered!' : 'Your team is registered!',
       message: doneMessage,
       listenText: doneMessage,
       confirmText: 'Got it',

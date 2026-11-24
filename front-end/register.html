@@ -3,42 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pickleball Open Play</title>
-  <meta name="description" content="Join our pickleball open play. See the schedule, check live slot availability, and register online.">
+  <title>Pickleball Event</title>
+  <meta name="description" content="Join our pickleball event. See the schedule, check live slot availability, and register online.">
   <meta name="theme-color" content="#0c3b2a">
 
   <!-- Link preview (Messenger, Facebook, etc.). Change the domain below if your site address changes. -->
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Pickleball Open Play">
-  <meta property="og:description" content="Check the live slots and register for our pickleball open play.">
+  <meta property="og:title" content="Pickleball Event">
+  <meta property="og:description" content="Check the live slots and register for our pickleball event.">
   <meta property="og:image" content="https://cansirong-open-play.vercel.app/og-image.png">
-  <meta property="og:url" content="https://cansirong-open-play.vercel.app/">
+  <meta property="og:url" content="https://cansirong-open-play.vercel.app/register.html">
   <meta name="twitter:card" content="summary_large_image">
 
   <!-- Tab icon -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%93%3C/text%3E%3C/svg%3E">
+
   <style id="critical-bg">html{background:#0c3b2a}</style>
   <link rel="stylesheet" href="styles.css">
 
-  <!-- Smooth fade-in pagdating galing sa landing page -->
-  <style>
-    html{scroll-behavior:smooth}
-    body{animation:pageIn .5s ease both}
-    @keyframes pageIn{from{opacity:0}to{opacity:1}}
-    @media (prefers-reduced-motion:reduce){
-      body{animation:none}
-      html{scroll-behavior:auto}
-    }
-    
-  </style>
 </head>
 <body>
 
   <header class="hero">
     <div class="container">
-      <p class="eyebrow">Let's ready</p>
-      <h1 id="event-title">Pickleball Open Play</h1>
-      <p class="hero-sub" id="event-tagline">No partner needed. Show up, sign up, and play.</p>
+      <p class="eyebrow">Register</p>
+      <h1 id="event-title">Pickleball Event</h1>
+      <p class="hero-sub" id="event-tagline">Reserve your slot and see you on the court.</p>
 
       <!-- Countdown (filled by app.js, hidden until the event has a start time) -->
       <div class="countdown" id="countdown" role="timer" aria-live="off" hidden>
@@ -47,9 +37,6 @@
       </div>
 
       <a class="btn btn-primary" href="#register">Register now</a>
-      <p style="margin-top:14px">
-        <a href="index.html" style="color:#d4f24a;font-weight:700">Read the welcome guide →</a>
-      </p>
     </div>
   </header>
 
@@ -97,7 +84,7 @@
         <!-- Players who already registered send their reference number here after paying -->
         <form class="ref-form" id="ref-form" novalidate>
           <h3>Already paid? Send your reference number</h3>
-          <p class="ref-warning" role="note"><span class="ref-warning-icon" aria-hidden="true"></span><span>Use the <strong>same contact number</strong> you registered with. If it does not work, message the organizer with your GCash receipt.</span></p>
+          <p class="ref-warning" role="note"><span class="ref-warning-icon" aria-hidden="true">!</span><span>Use the <strong>same contact number</strong> you registered with. If it does not work, message the organizer with your GCash receipt.</span></p>
           <div class="grid-2">
             <div class="field">
               <label for="r-contact">Contact number</label>
@@ -134,7 +121,10 @@
         </div>
         <p class="muted" id="slot-left">&nbsp;</p>
 
-         <!-- What the Unpaid / Pending / Paid labels mean (shown only when GCash payment is set up) -->
+        <!-- By Team / Solo: how many slots each open category has -->
+        <ul class="cat-summary" id="cat-summary" hidden></ul>
+
+        <!-- What the Unpaid / Pending / Paid labels mean (shown only when GCash payment is set up) -->
         <ul class="pay-legend" id="pay-legend" hidden>
           <li><span class="slot-pay unpaid">Unpaid</span><span>Registered, no payment sent yet.</span></li>
           <li><span class="slot-pay pending">Pending</span><span>Reference number sent, waiting for the organizer to check it.</span></li>
@@ -214,36 +204,44 @@
           <p class="form-msg" id="form-msg" role="status" aria-live="polite"></p>
         </form>
 
-        <!-- BY TEAM form: shown instead of the form above when the organizer switches to By Team -->
+        <!-- BY TEAM / SOLO form: shown instead of the form above when the organizer switches to By Team or Solo -->
         <form id="team-form" novalidate hidden>
-          <p class="muted small team-hint">One team = 2 players. The captain (Player 1) registers the team.</p>
-
           <div class="field">
+            <label for="tf-category">Category</label>
+             <select id="tf-category" name="category" required>
+            </select>
+            <p class="error" id="terr-category" role="alert"></p>
+          </div>
+
+          <p class="muted small team-hint" id="team-hint-top">One team = 2 players. The captain (Player 1) registers the team.</p>
+
+          <div class="field" id="field-teamName">
             <label for="tf-teamName">Team name</label>
             <input id="tf-teamName" name="teamName" type="text" required maxlength="40" autocomplete="off">
             <p class="error" id="terr-teamName" role="alert"></p>
           </div>
 
           <div class="field">
-            <label for="tf-fullName">Player 1 (captain) name</label>
+            <label for="tf-fullName" id="lbl-fullName">Player 1 (captain) name</label>
             <input id="tf-fullName" name="fullName" type="text" autocomplete="name" required maxlength="80">
             <p class="error" id="terr-fullName" role="alert"></p>
           </div>
 
           <div class="field">
-            <label for="tf-contactNumber">Player 1 contact number</label>
+            <label for="tf-contactNumber" id="lbl-contactNumber">Player 1 contact number</label>
             <input id="tf-contactNumber" name="contactNumber" type="tel" inputmode="tel" autocomplete="tel"
                    placeholder="09XX XXX XXXX" maxlength="11" required>
             <p class="error" id="terr-contactNumber" role="alert"></p>
           </div>
 
-          <div class="field">
-            <label for="tf-partnerName">Player 2 name</label>
+          <div class="field" id="field-partnerName">
+           <label for="tf-partnerName" id="lbl-partnerName">Player 2 name</label>
             <input id="tf-partnerName" name="partnerName" type="text" required maxlength="80" autocomplete="off">
             <p class="error" id="terr-partnerName" role="alert"></p>
           </div>
-                    <fieldset class="group">
-            <legend>Where is your team from?</legend>
+
+          <fieldset class="group">
+            <legend id="team-legend">Where is your team from?</legend>
 
             <div class="field">
               <label for="tf-municipalityOrCity">Municipality / City</label>
@@ -258,11 +256,11 @@
             </div>
           </fieldset>
 
-          <p class="muted small team-hint">One payment per team. When you send your GCash reference later, use the captain's contact number.</p>
+          <p class="muted small team-hint" id="team-hint-pay">One payment per team. When you send your GCash reference later, use the captain's contact number.</p>
 
           <div class="field check">
             <input id="tf-consent" name="consent" type="checkbox" required>
-            <label for="tf-consent">I agree to show our team name on the public list.</label>
+            <label for="tf-consent"><span id="consent-text">I agree to show our team name on the public list.</span></label>
             <p class="error" id="terr-consent" role="alert"></p>
           </div>
 
@@ -277,7 +275,7 @@
   <footer class="footer">
     <div class="container">
        
-      <p class="muted small">Pickleball Open Play · All skill levels welcome.</p>
+      <p class="muted small">Pickleball · See you on the court!</p>
     </div>
   </footer>
 
@@ -309,20 +307,6 @@
 
   <script src="config.js" defer></script>
   <script src="app.js" defer></script>
-
-  <!-- Dahan-dahang pagbaba papunta sa Register form pagdating galing landing page -->
-  <script>
-
-    window.addEventListener('load', function () {
-      if (location.hash !== '#register') return;
-      window.scrollTo(0, 0);
-      setTimeout(function () {
-        var el = document.getElementById('register');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 400);
-    });
-    
-  </script>
 
 </body>
 </html>

@@ -1521,7 +1521,7 @@ table.data { min-width: 1240px; }
 }
 
 /* ---------- BY TEAM MODE ---------- */
-#reg-table[data-mode="team"] .col-tag { display: none; }
+#reg-table[data-mode="team"] .col-tag, #reg-table[data-mode="solo"] .col-tag { display: none; }
 #tag-field[hidden] { display: none; }
 .team-hint { margin: 0 0 10px; line-height: 1.45; }
 #team-form[hidden], #reg-form[hidden] { display: none; }
@@ -1596,3 +1596,25 @@ html.event-ready .hero .container:has(#event-title) > :nth-child(4) { animation-
 html.event-ready .hero .container:has(#event-title) > :nth-child(5) { animation-delay: .32s; }
 html.event-ready .hero .container:has(#event-title) > :nth-child(6) { animation-delay: .4s; }
 @media (prefers-reduced-motion: reduce) { .hero .container:has(#event-title) > * { opacity: 1; animation: none !important; } }
+
+/* ---------- By Team / Solo categories ---------- */
+.cat-summary { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.cat-summary li { display: inline-flex; gap: 8px; align-items: center; padding: 6px 12px; border-radius: 999px; background: var(--surface-tint, #eef6ea); border: 1px solid var(--line); font-size: .85rem; font-weight: 600; }
+.cat-summary li b { font-variant-numeric: tabular-nums; }
+.cat-summary li.full { opacity: .6; text-decoration: line-through; }
+.slot-cat { display: inline-block; align-self: flex-start; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: rgba(31, 138, 95, .12); color: var(--green-800, #14573e); font-size: .72rem; font-weight: 700; }
+
+/* ---------- Admin: categories and the Category column ---------- */
+#reg-table[data-mode="open"] .col-cat { display: none; }
+.cat-list { display: grid; gap: 10px; margin: 12px 0 16px; }
+.cat-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-tint, #f4f8f1); }
+.cat-open { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; cursor: pointer; }
+.cat-open input { width: 20px; height: 20px; }
+.cat-max { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.cat-max input { width: 84px; }
+
+/* ---------- Category chips are buttons: the chosen one shows its own slots ---------- */
+.cat-summary li { cursor: pointer; user-select: none; transition: background .15s, color .15s; }
+.cat-summary li:focus-visible { outline: 2px solid var(--green-700, #1f8a5f); outline-offset: 2px; }
+.cat-summary li.on { background: var(--green-800, #14573e); border-color: var(--green-800, #14573e); color: #fff; }
+.cat-summary li.full.on { opacity: 1; }

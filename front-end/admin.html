@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Open Play Admin</title>
+  <title>Admin</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -46,9 +46,9 @@
         <h2 id="slots-heading">Slots</h2>
 
         <div class="stats">
-          <div class="stat"><b id="sum-occupied">–</b><span id="lbl-occupied">Players</span></div>
+          <div class="stat"><b id="sum-occupied">–</b><span id="lbl-occupied">Registered</span></div>
           <div class="stat"><b id="sum-available">–</b><span>Available</span></div>
-          <div class="stat"><b id="sum-max">–</b><span id="lbl-max">Max players</span></div>
+          <div class="stat"><b id="sum-max">–</b><span id="lbl-max">Max slots</span></div>
           <div class="stat"><b id="sum-paid">–</b><span>Paid</span></div>
           <div class="stat"><b id="sum-unpaid">–</b><span>Unpaid</span></div>
         </div>
@@ -64,9 +64,12 @@
           <button type="button" class="chip" data-pay="paid">Paid <span class="count" id="chip-paid">0</span></button>
         </div>
 
+        <!-- By Team / Solo: one list per category -->
+        <div class="chips" id="cat-chips" role="group" aria-label="Category" hidden></div>
+
         <div class="toolbar">
           <div class="field search-field">
-            <label for="filter-search">Search player</label>
+            <label for="filter-search">Search</label>
             <input id="filter-search" type="search"  placeholder="Name, team, number, barangay, reference..." maxlength="60" autocomplete="off">
           </div>
           <div class="field small-field">
@@ -76,6 +79,12 @@
               <option value="pending">Pending</option>
               <option value="confirmed">Confirmed</option>
               <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="field small-field" id="cat-filter-field" hidden>
+            <label for="filter-category">Category</label>
+            <select id="filter-category">
+              <option value="">All</option>
             </select>
           </div>
           <div class="field small-field" id="tag-field">
@@ -98,7 +107,8 @@
             <thead>
               <tr>
                 <th>#</th>
-                <th id="th-player">Player</th>
+                <th id="th-player">Name</th>
+                <th class="col-cat">Category</th>
                 <th>Contact</th>
                 <th class="col-addr">Address</th>
                 <th>Registered</th>
@@ -166,7 +176,7 @@
 
           <div class="field">
             <label for="ev-fee">Fee</label>
-            <input id="ev-fee" type="text" maxlength="60" placeholder="e.g. PHP 150 per player">
+            <input id="ev-fee" type="text" maxlength="60" placeholder="e.g. PHP 150 per player or per team">
           </div>
 
           <div class="grid-2">
@@ -209,6 +219,7 @@
             <label for="mode-select">Active registration</label>
             <select id="mode-select">
               <option value="open">Open Play (single players)</option>
+              <option value="solo">Solo (1 player, boy or girl)</option>
               <option value="team">By Team (2 players per team)</option>
             </select>
           </div>
@@ -217,18 +228,29 @@
         <p class="form-msg" id="mode-msg" role="status" aria-live="polite"></p>
       </section>
 
-      <section class="card" aria-labelledby="max-heading">
+      <section class="card" id="cat-card" aria-labelledby="cat-heading" hidden>
+        <h2 id="cat-heading">Categories</h2>
+        <p class="muted small" id="cat-help">Choose which categories are open for registration. You can open all of them at the same time. Each category has its own maximum slots.</p>
+        <form id="cat-form" novalidate>
+          <div class="cat-list" id="cat-list"></div>
+          <button class="btn btn-primary btn-sm" id="cat-btn" type="submit">Save categories</button>
+          <p class="form-msg" id="cat-msg" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="card" id="max-card" aria-labelledby="max-heading">
         <h2 id="max-heading">Maximum slots</h2>
-        <p class="muted small">How many players (Open Play) or teams (By Team) can register.</p>
+        <p class="muted small">How many slots can be taken. In Open Play, one slot is one player. In By Team, one slot is one team.</p>
 
         <form id="max-form" class="toolbar" novalidate>
           <div class="field small-field">
-            <label for="max-input" id="max-label">Change maximum players</label>
+            <label for="max-input" id="max-label">Change maximum slots</label>
             <input id="max-input" type="number" min="1" max="200" step="1" inputmode="numeric">
           </div>
           <button class="btn btn-primary btn-sm" id="max-btn" type="submit">Save maximum</button>
         </form>
       </section>
+
       </div>
 
     </div>
