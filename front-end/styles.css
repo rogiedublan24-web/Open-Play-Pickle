@@ -1618,3 +1618,27 @@ html.event-ready .hero .container:has(#event-title) > :nth-child(6) { animation-
 .cat-summary li:focus-visible { outline: 2px solid var(--green-700, #1f8a5f); outline-offset: 2px; }
 .cat-summary li.on { background: var(--green-800, #14573e); border-color: var(--green-800, #14573e); color: #fff; }
 .cat-summary li.full.on { opacity: 1; }
+
+/* ---------- Link back to the landing page (top-left of the green header) ---------- */
+.hero-back {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .16);
+  border: 1px solid rgba(255, 255, 255, .35);
+  color: #fff;
+  font-size: .88rem;
+  font-weight: 700;
+  text-decoration: none;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  transition: background-color .15s, transform .15s;
+}
+.hero-back:hover { background: rgba(255, 255, 255, .28); transform: translateX(-2px); }
+.hero-back:focus-visible { outline: 2px solid #e8fd66; outline-offset: 2px; }
