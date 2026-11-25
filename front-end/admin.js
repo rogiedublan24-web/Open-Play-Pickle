@@ -419,13 +419,16 @@ function buildRow(reg, number) {
   tagSelect.dataset.tag = reg.playerTag;
   tagSelect.addEventListener('change', () => { tagSelect.dataset.tag = tagSelect.value; });
   const statusSelect = makeSelect(STATUSES, reg.status, `Status for ${label}`);
+  statusSelect.className = 'status-select';
+  statusSelect.dataset.status = reg.status;
+  statusSelect.addEventListener('change', () => { statusSelect.dataset.status = statusSelect.value; });
   const paidSelect = makeSelect(PAYMENT, reg.paid ? 'Paid' : 'Unpaid', `Payment for ${label}`);
   paidSelect.className = 'paid-select';
   paidSelect.dataset.paid = String(Boolean(reg.paid));
   paidSelect.addEventListener('change', () => {
     paidSelect.dataset.paid = String(paidSelect.value === 'Paid');
     // Marking a pending player as paid also confirms them
-    if (paidSelect.value === 'Paid' && statusSelect.value === 'pending') statusSelect.value = 'confirmed';
+   if (paidSelect.value === 'Paid' && statusSelect.value === 'pending') { statusSelect.value = 'confirmed'; statusSelect.dataset.status = 'confirmed'; }
   });
 
   const saveBtn = document.createElement('button');
@@ -448,30 +451,6 @@ function buildRow(reg, number) {
       saveBtn.disabled = false;
     }
   });
-
-  // One tap: mark as paid (and confirm the slot if it was still pending)
-  let markPaidBtn = null;
-  if (!reg.paid && reg.status !== 'cancelled') {
-    markPaidBtn = document.createElement('button');
-    markPaidBtn.type = 'button';
-    markPaidBtn.className = 'btn btn-paid btn-sm';
-    markPaidBtn.textContent = 'Mark paid';
-    markPaidBtn.addEventListener('click', async () => {
-      showMessage('', '');
-      markPaidBtn.disabled = true;
-      try {
-        await api.updateRegistration(reg._id, {
-          paid: true,
-          ...(reg.status === 'pending' ? { status: 'confirmed' } : {}),
-        });
-        showMessage(`${label}: marked as paid.`, 'ok');
-        await Promise.all([loadRegistrations(), loadSlots()]);
-      } catch (err) {
-        handleError(err);
-        markPaidBtn.disabled = false;
-      }
-    });
-  }
 
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
@@ -504,7 +483,7 @@ function buildRow(reg, number) {
 
   const actions = document.createElement('div');
   actions.className = 'actions';
-  if (markPaidBtn) actions.append(markPaidBtn);
+  
   actions.append(saveBtn, deleteBtn);
 
   const playerCell = isSolo
