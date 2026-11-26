@@ -1678,3 +1678,10 @@ select option[value="Bisita"]    { color: #6b3fb0; }
   select option:hover, select option:focus-visible { background: #eef6ea; }
   select option:checked { background: #e8fd66; }
 }
+
+/* ---------- Phone: leave room above the title for the "Back to site" link ---------- */
+.hero:has(> .hero-back) { padding-top: 78px; }
+@media (min-width: 900px) {
+  .hero:has(> .hero-back) { padding-top: 56px; }   /* on PC the link has enough room already */
+}
+.hero-back { font-size: .84rem; padding: 7px 12px; }
